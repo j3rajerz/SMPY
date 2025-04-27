@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8">
+  <title>SMPY</title>
+  
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سامانه مرتع‌پلاس شهرستان یزد (SMPY)</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn&display=swap" rel="stylesheet">
+<style>
+  body {
+    margin: 0;
+    font-family: 'Vazirmatn', sans-serif;
+    background: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') no-repeat center center fixed;
+    background-size: cover;
+    color: #fff;
+    overflow-x: hidden;
+  }
+  .overlay {
+    background: rgba(0, 50, 0, 0.7);
+    padding: 1.5rem;
+    border-radius: 1.5rem;
+    margin: 1rem;
+    animation: fadeIn 1s ease;
+    box-shadow: 0 0 15px rgba(255,255,255,0.3);
+  }
+  @keyframes fadeIn {
+    0% { opacity: 0; transform: scale(0.9); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  h1, h2 {
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+  input, select, button {
+    width: 100%;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    border: none;
+    border-radius: 1rem;
+    font-size: 1rem;
+    box-sizing: border-box;
+  }
+  button {
+    background: linear-gradient(135deg, #4CAF50, #81C784);
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  button:hover {
+    transform: scale(1.05);
+    background: linear-gradient(135deg, #45a049, #66bb6a);
+  }
+  .hidden { display: none; }
+  .menu, .form-section, .results, .manage-section { margin-top: 2rem; }
+  .total-score {
+    font-weight: bold;
+    font-size: 1.2rem;
+    text-align: center;
+    margin-top: 1rem;
+  }
+</style>
+</head>
+<body>
+<div class="overlay" id="login-section">
+  <h1>ورود به سامانه مرتع‌پلاس (SMPY)</h1>
+  <input type="text" id="username" placeholder="نام کاربری">
+  <input type="password" id="password" placeholder="رمز عبور">
+  <button onclick="login()">ورود</button>
+</div>
+
+<div class="overlay hidden" id="menu-section">
+  <h1>سامانه مرتع‌پلاس شهرستان یزد (SMPY)</h1>
+  <button onclick="showForm()">ثبت درخواست جدید</button>
+  <button onclick="showManage()">مدیریت درخواست‌ها</button>
+  <button onclick="logout()">خروج از سیستم</button>
+</div>
+
+<div class="overlay hidden" id="form-section">
+  <h2>ثبت اطلاعات</h2>
+  <input type="text" id="requester" placeholder="نام درخواست کننده">
+  <input type="number" id="coverPercent" placeholder="درصد پوشش گیاهی">
+  <input type="number" id="rockPercent" placeholder="درصد سنگریزه">
+  <select id="plantType">
+    <option value="">انتخاب نوع گونه</option>
+    <option value="علف یک‌ساله">علف یک‌ساله</option>
+    <option value="شور">شور</option>
+    <option value="درمنه">درمنه</option>
+    <option value="رمس">رمس</option>
+    <option value="قیچ">قیچ</option>
+    <option value="تاغ">تاغ</option>
+    <option value="گز">گز</option>
+    <option value="بادام‌کوهی">بادام‌کوهی</option>
+  </select>
+  <button onclick="calculate()">محاسبه</button>
+  <button onclick="backToMenu()">بازگشت به منو</button>
+</div>
+
+<div class="overlay hidden" id="results-section">
+  <h2>نتایج</h2>
+  <div id="resultContent"></div>
+  <div class="total-score" id="totalScore"></div>
+  <button onclick="backToMenu()">بازگشت به منو</button>
+</div>
+
+<div class="overlay hidden" id="manage-section">
+  <h2>مدیریت درخواست‌ها</h2>
+  <select id="requestList" onchange="loadRequest()"></select>
+  <button onclick="deleteRequest()">حذف درخواست</button>
+  <button onclick="editRequest()">ویرایش درخواست</button>
+  <button onclick="backToMenu()">بازگشت به منو</button>
+</div>
+
+<script>
+let requests = JSON.parse(localStorage.getItem('requests')) || [];
+let editMode = false;
+let editIndex = null;
+
+function saveRequests() {
+  localStorage.setItem('requests', JSON.stringify(requests));
+}
+
+function login() {
+  const user = document.getElementById('username').value;
+  const pass = document.getElementById('password').value;
+  if (user === 'abbas' && pass === '1396') {
+    document.getElementById('login-section').classList.add('hidden');
+    document.getElementById('menu-section').classList.remove('hidden');
+  } else {
+    alert('نام کاربری یا رمز عبور اشتباه است');
+  }
+}
+
+function showForm() {
+  document.getElementById('menu-section').classList.add('hidden');
+  document.getElementById('form-section').classList.remove('hidden');
+}
+
+function backToMenu() {
+  document.querySelectorAll('.overlay').forEach(sec => sec.classList.add('hidden'));
+  document.getElementById('menu-section').classList.remove('hidden');
+}
+
+function calculate() {
+  const requester = document.getElementById('requester').value;
+  const cover = parseFloat(document.getElementById('coverPercent').value);
+  const rock = parseFloat(document.getElementById('rockPercent').value);
+  const type = document.getElementById('plantType').value;
+
+  if (!requester || isNaN(cover) || isNaN(rock) || !type) {
+    alert('لطفاً همه فیلدها را پر کنید.');
+    return;
+  }
+
+  let results = {};
+  let forageBase = cover < 10 ? cover * 4 : cover * 6;
+  results.forage = evaluateScore(forageBase, [[0,10,0],[10,20,1,4],[20,30,5,9],[30,40,10,14],[40,50,15,19],[50,100,20]]);
+  results.coverScore = evaluateScore(cover, [[0,3,0],[3,6,1,4],[6,9,5,9],[9,12,10,14],[12,15,15,19],[15,100,20]]);
+  results.grazing = evaluateScore(cover, [[0,4,0],[4,8,1,3],[8,12,4,7],[12,16,8,13],[16,20,12,14],[20,100,15]]);
+  let harvestBase = cover < 10 ? cover * 4 : cover * 6;
+  results.harvest = evaluateScore(harvestBase, [[0,4,0],[4,8,1,3],[8,12,4,7],[12,16,8,11],[16,20,12,14],[20,100,15]]);
+  let totalCover = cover + rock;
+  results.soilProtect = evaluateScore(totalCover, [[0,5,0],[5,8,1,3],[8,12,4,7],[12,16,8,11],[16,20,12,14],[20,100,15]]);
+  results.erosion = evaluateErosion(type);
+
+  let total = results.forage + results.coverScore + results.grazing + results.harvest + results.soilProtect + results.erosion;
+
+  if (editMode) {
+    requests[editIndex] = { requester, results, total };
+    editMode = false;
+  } else {
+    requests.push({ requester, results, total });
+  }
+
+  saveRequests();
+  document.getElementById('form-section').classList.add('hidden');
+  document.getElementById('results-section').classList.remove('hidden');
+  showResults(results, total);
+}
+
+function evaluateScore(value, ranges) {
+  for (const r of ranges) {
+    if (value >= r[0] && value < r[1]) {
+      if (r.length === 3) return r[2];
+      return (r[2] + r[3]) / 2;
+    }
+  }
+  return 0;
+}
+
+function evaluateErosion(type) {
+  if (["شور","علف یک‌ساله"].includes(type)) return 1;
+  if (["درمنه","رمس","قیچ"].includes(type)) return 2;
+  if (["درمنه","رمس","قیچ","تاغ","گز","بادام‌کوهی"].includes(type)) return 3;
+  if (["تاغ","گز","بادام‌کوهی"].includes(type)) return 4;
+  return 0;
+}
+
+function showResults(results, total) {
+  const resDiv = document.getElementById('resultContent');
+  resDiv.innerHTML = `
+    <p>تولید کل علوفه: ${results.forage}</p>
+    <p>درصد تاج پوشش گیاهی: ${results.coverScore}</p>
+    <p>درصد گونه‌های مورد چرای دام: ${results.grazing}</p>
+    <p>درصد علوفه قابل برداشت مجاز: ${results.harvest}</p>
+    <p>حفاظت خاک: ${results.soilProtect}</p>
+    <p>فرسایش خاک: ${results.erosion}</p>
+  `;
+  document.getElementById('totalScore').textContent = `مجموع امتیازات: ${total}`;
+}
+
+function showManage() {
+  document.getElementById('menu-section').classList.add('hidden');
+  document.getElementById('manage-section').classList.remove('hidden');
+  refreshList();
+}
+
+function refreshList() {
+  const select = document.getElementById('requestList');
+  select.innerHTML = '';
+  requests.forEach((r, i) => {
+    let option = document.createElement('option');
+    option.value = i;
+    option.textContent = r.requester + ` (امتیاز: ${r.total})`;
+    select.appendChild(option);
+  });
+}
+
+function loadRequest() {
+  const idx = document.getElementById('requestList').value;
+  if (idx !== '') showResults(requests[idx].results, requests[idx].total);
+}
+
+function deleteRequest() {
+  const idx = document.getElementById('requestList').value;
+  if (idx !== '') {
+    requests.splice(idx,1);
+    saveRequests();
+    refreshList();
+  }
+}
+
+function editRequest() {
+  const idx = document.getElementById('requestList').value;
+  if (idx !== '') {
+    editMode = true;
+    editIndex = idx;
+    const data = requests[idx];
+    document.getElementById('requester').value = data.requester;
+    backToMenu();
+    showForm();
+  }
+}
+
+function logout() {
+  location.reload();
+}
+</script>
+</body>
+</html>
+<!-- partial -->
+  
+</body>
+</html>

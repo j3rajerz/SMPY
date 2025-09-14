@@ -524,6 +524,7 @@ window.addEventListener('load', () => {
   initUI();
   loadWaypoints();
   requestHighAccuracyPosition();
+  generateIconsAndSwapManifest();
 });
 
 async function ensureSqlLoaded() {
@@ -575,6 +576,100 @@ function getTilePng(db, z, x, y) {
   }
   stmt.free();
   return data;
+}
+
+// Generate PNG icons and swap manifest + apple-touch-icon at runtime
+async function generateIconsAndSwapManifest() {
+  try {
+    const icon512 = await drawIconPng(512);
+    const icon192 = await drawIconPng(192);
+
+    // Swap manifest
+    const manifest = {
+      name: 'جی‌پی‌اس میدانی',
+      short_name: 'GPS Field',
+      start_url: '.',
+      display: 'standalone',
+      background_color: '#0B1D14',
+      theme_color: '#0B1D14',
+      dir: 'rtl',
+      lang: 'fa',
+      icons: [
+        { src: icon192, sizes: '192x192', type: 'image/png' },
+        { src: icon512, sizes: '512x512', type: 'image/png' },
+      ]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+    let link = document.querySelector('link[rel="manifest"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'manifest';
+      document.head.appendChild(link);
+    }
+    link.href = URL.createObjectURL(blob);
+
+    // Apple touch icon
+    let apple = document.querySelector('link[rel="apple-touch-icon"]');
+    if (!apple) {
+      apple = document.createElement('link');
+      apple.rel = 'apple-touch-icon';
+      document.head.appendChild(apple);
+    }
+    apple.href = icon192;
+  } catch (e) { console.warn('icon gen failed', e); }
+}
+
+function drawIconPng(size) {
+  return new Promise((resolve) => {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    // background gradient
+    const g = ctx.createLinearGradient(0, 0, 0, size);
+    g.addColorStop(0, '#0B1D14');
+    g.addColorStop(1, '#0a110d');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    // rounded mask
+    const radius = size * 0.12;
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath();
+    roundRectPath(ctx, 0, 0, size, size, radius);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    // ring
+    ctx.strokeStyle = '#556B2F';
+    ctx.lineWidth = Math.max(6, size * 0.03);
+    ctx.beginPath();
+    ctx.arc(size/2, size/2, size*0.35, 0, Math.PI*2);
+    ctx.stroke();
+    // crosshairs
+    ctx.strokeStyle = '#A6FF00';
+    ctx.lineWidth = Math.max(8, size * 0.035);
+    ctx.beginPath();
+    ctx.moveTo(size/2, size*0.18); ctx.lineTo(size/2, size*0.34);
+    ctx.moveTo(size/2, size*0.66); ctx.lineTo(size/2, size*0.82);
+    ctx.moveTo(size*0.18, size/2); ctx.lineTo(size*0.34, size/2);
+    ctx.moveTo(size*0.66, size/2); ctx.lineTo(size*0.82, size/2);
+    ctx.stroke();
+    // center dot
+    ctx.fillStyle = '#A6FF00';
+    ctx.beginPath(); ctx.arc(size/2, size/2, Math.max(3, size*0.012), 0, Math.PI*2); ctx.fill();
+    // text GPS
+    ctx.fillStyle = '#C3FF00';
+    ctx.font = `bold ${Math.floor(size*0.16)}px Arial`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('GPS', size/2, size*0.92);
+    resolve(c.toDataURL('image/png'));
+  });
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
 }
 
 // Device orientation to update compass heading when GPS heading is absent

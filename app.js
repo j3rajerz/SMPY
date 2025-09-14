@@ -22,6 +22,8 @@ let followMode = false;
 let trackingEnabled = true;
 let navTarget = null; // {lat, lon, label} or null
 let navLine = null;
+let averaging = { active: false, samples: [] };
+let loggingCsv = { active: false, rows: [] };
 
 // UTM helpers using proj4
 function getUtmZone(longitude) {
@@ -201,6 +203,7 @@ function onPosition(pos) {
   // Heading indicator
   const hdg = (heading != null && !Number.isNaN(heading)) ? heading : computeCourseFromTrack(latitude, longitude);
   setHeading(hdg);
+  setNavArrow(hdg);
 
   // Trail update
   trackCoords.push([latitude, longitude]);
@@ -231,6 +234,17 @@ function onPosition(pos) {
 
   // Navigation overlay
   updateNavigationOverlay(latitude, longitude);
+
+  // Averaging
+  if (averaging.active) {
+    averaging.samples.push({ lat: latitude, lon: longitude, acc: accuracy ?? null });
+    updateAveragingUI();
+  }
+
+  // CSV logging
+  if (loggingCsv.active) {
+    loggingCsv.rows.push(`${new Date(pos.timestamp).toISOString()},${latitude},${longitude},${altitude ?? ''},${accuracy ?? ''},${speedKmh ?? ''}`);
+  }
 }
 
 function onPositionError(err) {
@@ -253,6 +267,20 @@ function setHeading(deg) {
   const green = document.getElementById('needle-green');
   red.style.transform = `translate(-50%, -90%) rotate(${deg}deg)`;
   green.style.transform = `translate(-50%, -10%) rotate(${deg + 180}deg)`;
+}
+
+function setNavArrow(headingDeg) {
+  const el = document.getElementById('nav-arrow'); if (!el) return;
+  if (!navTarget || headingDeg == null) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  // Rotate arrow towards bearing to target minus current heading
+  if (lastPosition && navTarget) {
+    const { latitude, longitude } = lastPosition.coords;
+    const from = turf.point([longitude, latitude]); const to = turf.point([navTarget.lon, navTarget.lat]);
+    const bearing = (turf.bearing(from, to) + 360) % 360;
+    const rel = ((bearing - headingDeg) + 360) % 360; // relative angle
+    el.style.transform = `translateX(-50%) rotate(${rel}deg)`;
+  }
 }
 
 function setGpsStatus(ok) {
@@ -638,6 +666,15 @@ function downloadA4Png() {
   a.href = url; a.download = 'map-a4.png'; a.click();
 }
 
+function downloadA4Pdf() {
+  const canvas = document.getElementById('a4-canvas');
+  const { jsPDF } = window.jspdf || {};
+  if (!jsPDF) { toast('PDF در دسترس نیست', 'error'); return; }
+  const pdf = new jsPDF('p', 'pt', [canvas.width, canvas.height]);
+  pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+  pdf.save('map-a4.pdf');
+}
+
 function initUI() {
   // Motion/compass permission (Android Chrome requires user gesture)
   const btnCompass = document.getElementById('btn-compass-perm');
@@ -661,6 +698,7 @@ function initUI() {
   document.getElementById('btn-waypoints').onclick = () => { openWaypointsDialog(); };
   document.getElementById('btn-print').onclick = openA4Preview;
   document.getElementById('download-image').onclick = downloadA4Png;
+  const btnPdf = document.getElementById('download-pdf'); if (btnPdf) btnPdf.onclick = downloadA4Pdf;
   document.getElementById('close-waypoints').onclick = closeWaypointsDialog;
   document.getElementById('close-a4').onclick = () => document.getElementById('dlg-a4').close();
 
@@ -736,6 +774,18 @@ function initUI() {
   if (gotoSubmit) gotoSubmit.onclick = onGotoUtmSubmit;
   const q39 = document.getElementById('utm-quick-39'); if (q39) q39.onclick = () => { document.getElementById('utm-zone').value = 39; };
   const q40 = document.getElementById('utm-quick-40'); if (q40) q40.onclick = () => { document.getElementById('utm-zone').value = 40; };
+
+  // Mark averaging modal
+  const dlgMark = document.getElementById('dlg-mark');
+  const closeMark = document.getElementById('close-mark'); if (closeMark) closeMark.onclick = () => dlgMark.close();
+  const btnMark = document.getElementById('btn-mark'); if (btnMark) btnMark.onclick = () => { dlgMark.showModal(); resetAveraging(); };
+  const avgStart = document.getElementById('avg-start'); if (avgStart) avgStart.onclick = startAveraging;
+  const avgStop = document.getElementById('avg-stop'); if (avgStop) avgStop.onclick = stopAveraging;
+  const avgSave = document.getElementById('avg-save'); if (avgSave) avgSave.onclick = saveAveragedPoint;
+
+  // Logging CSV toggle
+  const btnLog = document.getElementById('btn-log');
+  if (btnLog) btnLog.onclick = () => { loggingCsv.active = !loggingCsv.active; btnLog.textContent = loggingCsv.active ? 'توقف CSV' : 'ثبت CSV'; if (loggingCsv.active) loggingCsv.rows = ['time,lat,lon,alt,acc,speed']; };
 
   // Ripple effect delegation for all .btn
   document.body.addEventListener('click', (e) => {
@@ -1039,5 +1089,41 @@ function hapticBeep() {
     osc.start();
     setTimeout(() => { osc.stop(); ctx.close(); }, 120);
   } catch {}
+}
+
+// Averaging helpers
+function resetAveraging() { averaging = { active: false, samples: [] }; updateAveragingUI(); }
+function startAveraging() { averaging.active = true; averaging.samples = []; updateAveragingUI(); }
+function stopAveraging() { averaging.active = false; updateAveragingUI(); }
+function updateAveragingUI() {
+  const c = document.getElementById('avg-count'); const a = document.getElementById('avg-acc'); const u = document.getElementById('avg-utm'); const ll = document.getElementById('avg-latlon');
+  if (!c) return;
+  c.textContent = String(averaging.samples.length);
+  if (!averaging.samples.length) { a.textContent = '—'; u.textContent = '—'; ll.textContent = '—'; return; }
+  const avgLat = averaging.samples.reduce((s,p)=>s+p.lat,0)/averaging.samples.length;
+  const avgLon = averaging.samples.reduce((s,p)=>s+p.lon,0)/averaging.samples.length;
+  const accs = averaging.samples.map(p=>p.acc).filter(v=>v!=null);
+  const avgAcc = accs.length ? (accs.reduce((s,v)=>s+v,0)/accs.length) : null;
+  a.textContent = avgAcc!=null ? avgAcc.toFixed(1) : '—';
+  const utm = toUtm(avgLat, avgLon);
+  u.textContent = `${utm.zone}${utm.band} ${utm.easting} ${utm.northing}`;
+  ll.textContent = `${avgLat.toFixed(6)}, ${avgLon.toFixed(6)}`;
+}
+function saveAveragedPoint() {
+  if (!averaging.samples.length) { toast('نمونه‌ای وجود ندارد', 'error'); return; }
+  const avgLat = averaging.samples.reduce((s,p)=>s+p.lat,0)/averaging.samples.length;
+  const avgLon = averaging.samples.reduce((s,p)=>s+p.lon,0)/averaging.samples.length;
+  const type = document.getElementById('mark-type')?.value || 'Point';
+  const note = document.getElementById('mark-note')?.value || '';
+  const utm = toUtm(avgLat, avgLon);
+  const wp = { id: `AVG-${Date.now()}`, lat: avgLat, lon: avgLon, altitudeM: null, accuracyM: null, utmZone: utm.zone, utmBand: utm.band, easting: utm.easting, northing: utm.northing, timestamp: new Date().toISOString(), type, note };
+  waypoints.push(wp); saveWaypoints(); L.circleMarker([wp.lat, wp.lon], { radius: 5, color: '#ff3b30', weight: 2, fillColor: '#ff3b30', fillOpacity: 0.6 }).addTo(map); renderWaypointList();
+  document.getElementById('dlg-mark').close(); toast('نقطه ذخیره شد', 'success');
+}
+
+// Download CSV log
+function downloadCsvLog() {
+  if (!loggingCsv.rows.length) { toast('داده‌ای ثبت نشده', 'warn'); return; }
+  downloadText('log.csv', loggingCsv.rows.join('\n'), 'text/csv');
 }
 

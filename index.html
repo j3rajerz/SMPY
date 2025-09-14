@@ -30,12 +30,19 @@
     <!-- sql.js for MBTiles (SQLite in browser) -->
     <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/sql-wasm.js"></script>
 
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <!-- LZ-String for shareable links -->
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header class="app-header">
       <div class="brand">جی‌پی‌اس میدانی</div>
       <div class="header-status">
+        <button id="btn-offline-manager" class="btn" style="padding:4px 8px;margin-inline-end:8px">مدیریت آفلاین</button>
+        <button id="btn-log" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت CSV</button>
         <button id="toggle-track" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت مسیر</button>
         <button id="toggle-follow" class="btn" style="padding:4px 8px;margin-inline-end:8px">دنبال نقشه</button>
         <button id="clear-nav" class="btn" style="padding:4px 8px;margin-inline-end:8px">لغو ناوبری</button>
@@ -83,6 +90,7 @@
         <div id="map"></div>
         <div id="measure-overlay" class="measure-overlay hidden"></div>
         <div id="nav-overlay" class="measure-overlay hidden" style="right:8px;left:auto;top:8px;bottom:auto"></div>
+        <div id="nav-arrow" class="nav-arrow hidden">➤</div>
       </section>
 
       <nav class="action-bar">
@@ -164,6 +172,39 @@
       </div>
       <footer>
         <button id="download-image" class="btn primary">دانلود PNG</button>
+        <button id="download-pdf" class="btn">دانلود PDF</button>
+      </footer>
+    </dialog>
+
+    <!-- Mark (Averaging) Modal -->
+    <dialog id="dlg-mark" class="modal">
+      <header>
+        <h3>ثبت نقطه (میانگین‌گیری)</h3>
+        <button class="icon" id="close-mark">✕</button>
+      </header>
+      <div class="modal-body">
+        <div class="setting">
+          <div>نمونه‌ها: <span id="avg-count" class="mono">0</span> | دقت میانگین: <span id="avg-acc" class="mono">—</span> m</div>
+          <div class="mono">UTM: <span id="avg-utm">—</span></div>
+          <div class="mono">Lat/Lon: <span id="avg-latlon">—</span></div>
+        </div>
+        <div class="setting">
+          <label>نوع عارضه</label>
+          <select id="mark-type" class="btn">
+            <option value="Point">نقطه</option>
+            <option value="POI">نقطه مهم</option>
+            <option value="Control">کنترل</option>
+          </select>
+        </div>
+        <div class="setting">
+          <label>توضیحات</label>
+          <input id="mark-note" type="text" placeholder="اختیاری" />
+        </div>
+      </div>
+      <footer>
+        <button id="avg-start" class="btn">شروع</button>
+        <button id="avg-stop" class="btn">توقف</button>
+        <button id="avg-save" class="btn primary">ذخیره</button>
       </footer>
     </dialog>
 

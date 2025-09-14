@@ -280,6 +280,11 @@ function setNavArrow(headingDeg) {
     const bearing = (turf.bearing(from, to) + 360) % 360;
     const rel = ((bearing - headingDeg) + 360) % 360; // relative angle
     el.style.transform = `translateX(-50%) rotate(${rel}deg)`;
+    const full = document.querySelector('.nav-full-arrow');
+    const info = document.getElementById('nav-full-info');
+    const d = turf.distance(from, to, { units: 'meters' });
+    if (full) full.style.transform = `rotate(${rel}deg)`;
+    if (info) info.textContent = `فاصله: ${d.toFixed(1)} m | سمت: ${bearing.toFixed(0)}°`;
   }
 }
 
@@ -627,6 +632,34 @@ function openA4Preview() {
     // Scale bar (approx, based on current zoom metersPerPixel)
     drawScaleBar(ctx, dx, dy + drawH + 16, drawW);
 
+    // Draw UTM grid (simple) every 1000 m if zoomed in enough
+    try {
+      const center = map.getCenter();
+      const { proj } = getUtmProj(center.lng, center.lat);
+      const topLeftLatLng = map.containerPointToLatLng([0, 0]);
+      const bottomRightLatLng = map.containerPointToLatLng([map.getSize().x, map.getSize().y]);
+      const [minX, maxY] = proj.forward([topLeftLatLng.lng, topLeftLatLng.lat]);
+      const [maxX, minY] = proj.forward([bottomRightLatLng.lng, bottomRightLatLng.lat]);
+      const step = 1000; // 1 km
+      ctx.strokeStyle = 'rgba(166,255,0,0.2)'; ctx.lineWidth = 1;
+      for (let x = Math.floor(minX/step)*step; x <= Math.ceil(maxX/step)*step; x += step) {
+        const p1 = proj.inverse([x, minY]); const p2 = proj.inverse([x, maxY]);
+        const a = map.latLngToContainerPoint([p1[1], p1[0]]);
+        const b = map.latLngToContainerPoint([p2[1], p2[0]]);
+        const ax = dx + (a.x / map.getSize().x) * drawW; const ay = dy + (a.y / map.getSize().y) * drawH;
+        const bx = dx + (b.x / map.getSize().x) * drawW; const by = dy + (b.y / map.getSize().y) * drawH;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      }
+      for (let y = Math.floor(minY/step)*step; y <= Math.ceil(maxY/step)*step; y += step) {
+        const p1 = proj.inverse([minX, y]); const p2 = proj.inverse([maxX, y]);
+        const a = map.latLngToContainerPoint([p1[1], p1[0]]);
+        const b = map.latLngToContainerPoint([p2[1], p2[0]]);
+        const ax = dx + (a.x / map.getSize().x) * drawW; const ay = dy + (a.y / map.getSize().y) * drawH;
+        const bx = dx + (b.x / map.getSize().x) * drawW; const by = dy + (b.y / map.getSize().y) * drawH;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      }
+    } catch {}
+
     document.getElementById('dlg-a4').showModal();
   });
 }
@@ -755,6 +788,13 @@ function initUI() {
   // Clear navigation
   const btnClearNav = document.getElementById('clear-nav');
   if (btnClearNav) btnClearNav.onclick = () => { setNavTarget(null); toast('ناوبری لغو شد', 'success'); };
+
+  // Arrow mode fullscreen
+  const btnArrow = document.getElementById('btn-arrow-mode');
+  const navFull = document.getElementById('nav-full');
+  const closeNavFull = document.getElementById('close-nav-full');
+  if (btnArrow) btnArrow.onclick = () => { navFull.classList.remove('hidden'); };
+  if (closeNavFull) closeNavFull.onclick = () => { navFull.classList.add('hidden'); };
 
   // Info panel collapse persist
   const info = document.getElementById('info-panel');

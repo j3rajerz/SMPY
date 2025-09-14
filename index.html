@@ -46,6 +46,7 @@
         <button id="toggle-track" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت مسیر</button>
         <button id="toggle-follow" class="btn" style="padding:4px 8px;margin-inline-end:8px">دنبال نقشه</button>
         <button id="clear-nav" class="btn" style="padding:4px 8px;margin-inline-end:8px">لغو ناوبری</button>
+        <button id="btn-arrow-mode" class="btn" style="padding:4px 8px;margin-inline-end:8px">حالت پیکانی</button>
         <button id="btn-goto-utm" class="btn" style="padding:4px 8px;margin-inline-end:8px">برو به UTM</button>
         <button id="btn-settings" class="btn" style="padding:4px 8px;margin-inline-end:8px">تنظیمات</button>
         <button id="btn-compass-perm" class="btn" style="padding:4px 8px;margin-inline-end:8px">اجازه قطب‌نما</button>
@@ -91,6 +92,11 @@
         <div id="measure-overlay" class="measure-overlay hidden"></div>
         <div id="nav-overlay" class="measure-overlay hidden" style="right:8px;left:auto;top:8px;bottom:auto"></div>
         <div id="nav-arrow" class="nav-arrow hidden">➤</div>
+        <div id="nav-full" class="nav-full hidden">
+          <div class="nav-full-arrow">➤</div>
+          <div class="nav-full-info mono" id="nav-full-info">—</div>
+          <button id="close-nav-full" class="btn" style="position:absolute;top:12px;left:12px">خروج</button>
+        </div>
       </section>
 
       <nav class="action-bar">

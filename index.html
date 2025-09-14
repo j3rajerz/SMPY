@@ -36,6 +36,9 @@
     <header class="app-header">
       <div class="brand">جی‌پی‌اس میدانی</div>
       <div class="header-status">
+        <button id="toggle-track" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت مسیر</button>
+        <button id="toggle-follow" class="btn" style="padding:4px 8px;margin-inline-end:8px">دنبال نقشه</button>
+        <button id="clear-nav" class="btn" style="padding:4px 8px;margin-inline-end:8px">لغو ناوبری</button>
         <button id="btn-settings" class="btn" style="padding:4px 8px;margin-inline-end:8px">تنظیمات</button>
         <button id="btn-compass-perm" class="btn" style="padding:4px 8px;margin-inline-end:8px">اجازه قطب‌نما</button>
         <label class="btn" style="padding:4px 8px;margin-inline-end:8px">
@@ -78,6 +81,7 @@
       <section class="map-wrap">
         <div id="map"></div>
         <div id="measure-overlay" class="measure-overlay hidden"></div>
+        <div id="nav-overlay" class="measure-overlay hidden" style="right:8px;left:auto;top:8px;bottom:auto"></div>
       </section>
 
       <nav class="action-bar">
@@ -102,6 +106,8 @@
         <button id="export-kml" class="btn">خروجی KML</button>
         <button id="export-dxf" class="btn">خروجی DXF</button>
         <button id="share-files" class="btn">اشتراک</button>
+        <button id="import-data" class="btn">ورود GPX/KML</button>
+        <input id="import-file" type="file" accept=".gpx,.kml,application/gpx+xml,application/vnd.google-earth.kml+xml" style="display:none" />
       </footer>
     </dialog>
 

@@ -18,6 +18,10 @@ let settings = { maxAccM: 20, alertRadiusM: 30 };
 let speedHistory = []; // last N speeds (km/h)
 let altHistory = [];   // last N altitudes (m)
 const HIST_LIMIT = 60;
+let followMode = false;
+let trackingEnabled = true;
+let navTarget = null; // waypoint id
+let navLine = null;
 
 // UTM helpers using proj4
 function getUtmZone(longitude) {
@@ -184,9 +188,7 @@ function onPosition(pos) {
   }
 
   // Center map on first fix
-  if (trackCoords.length === 1) {
-    map.setView([latitude, longitude], 17);
-  }
+  if (trackCoords.length === 1 || followMode) { map.setView([latitude, longitude], followMode ? map.getZoom() : 17); }
 
   setGpsStatus(true);
 
@@ -199,6 +201,9 @@ function onPosition(pos) {
   if (accuracy != null && accuracy > settings.maxAccM) return;
   // Proximity alert
   checkProximityAlerts(latitude, longitude);
+
+  // Navigation overlay
+  updateNavigationOverlay(latitude, longitude);
 }
 
 function onPositionError(err) {
@@ -288,6 +293,11 @@ function renderWaypointList() {
     btn.textContent = 'Zoom';
     btn.onclick = () => map.setView([w.lat, w.lon], 18);
     right.appendChild(btn);
+    const nav = document.createElement('button');
+    nav.className = 'btn';
+    nav.textContent = 'ناوبری';
+    nav.onclick = () => { setNavTarget(w.id); toast('ناوبری به نقطه فعال شد', 'success'); };
+    right.appendChild(nav);
     const del = document.createElement('button');
     del.className = 'btn';
     del.textContent = 'حذف';
@@ -373,6 +383,74 @@ function downloadText(filename, text, mime) {
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
+}
+
+function onImportFile(ev) {
+  const file = ev.target.files[0]; if (!file) return;
+  const name = file.name.toLowerCase();
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = reader.result;
+    try {
+      if (name.endsWith('.gpx')) importGPX(text);
+      else if (name.endsWith('.kml')) importKML(text);
+      toast('داده وارد شد', 'success');
+    } catch (e) { console.warn(e); toast('خطا در ورود فایل', 'error'); }
+  };
+  reader.readAsText(file);
+}
+
+function importGPX(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const wpts = Array.from(doc.getElementsByTagName('wpt'));
+  for (const w of wpts) {
+    const lat = parseFloat(w.getAttribute('lat')); const lon = parseFloat(w.getAttribute('lon'));
+    if (Number.isFinite(lat) && Number.isFinite(lon)) { addWaypointRaw(lat, lon, null); }
+  }
+  const trkpts = Array.from(doc.getElementsByTagName('trkpt')).map(n => [parseFloat(n.getAttribute('lat')), parseFloat(n.getAttribute('lon'))]).filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+  if (trkpts.length) { trackCoords = trkpts; trailLine.setLatLngs(trkpts); }
+}
+
+function importKML(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const points = Array.from(doc.getElementsByTagName('Point'));
+  for (const p of points) {
+    const coords = p.getElementsByTagName('coordinates')[0]?.textContent?.trim();
+    if (!coords) continue; const [lon, lat] = coords.split(',').map(Number);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) { addWaypointRaw(lat, lon, null); }
+  }
+  const lines = Array.from(doc.getElementsByTagName('LineString'));
+  for (const l of lines) {
+    const coordsStr = l.getElementsByTagName('coordinates')[0]?.textContent?.trim();
+    if (!coordsStr) continue;
+    const pts = coordsStr.split(/\s+/).map(s => s.split(',').map(Number)).map(([lon, lat]) => [lat, lon]).filter(p => Number.isFinite(p[0]) && Number.isFinite(p[1]));
+    if (pts.length) { trackCoords = pts; trailLine.setLatLngs(pts); }
+  }
+}
+
+function addWaypointRaw(lat, lon, alt) {
+  const utm = toUtm(lat, lon);
+  const wp = { id: Date.now().toString() + Math.random().toString(36).slice(2,6), lat, lon, altitudeM: alt ?? null, accuracyM: null, utmZone: utm.zone, utmBand: utm.band, easting: utm.easting, northing: utm.northing, timestamp: new Date().toISOString() };
+  waypoints.push(wp); saveWaypoints(); L.circleMarker([lat, lon], { radius: 5, color: '#ff3b30', weight: 2, fillColor: '#ff3b30', fillOpacity: 0.6 }).addTo(map); renderWaypointList();
+}
+
+function setNavTarget(id) {
+  navTarget = id;
+  if (navLine) { map.removeLayer(navLine); navLine = null; }
+}
+
+function updateNavigationOverlay(lat, lon) {
+  const el = document.getElementById('nav-overlay'); if (!el) return;
+  if (!navTarget) { el.classList.add('hidden'); if (navLine) { map.removeLayer(navLine); navLine = null; } return; }
+  const target = waypoints.find(w => w.id === navTarget);
+  if (!target) { setNavTarget(null); return; }
+  const from = turf.point([lon, lat]); const to = turf.point([target.lon, target.lat]);
+  const d = turf.distance(from, to, { units: 'meters' });
+  const b = (turf.bearing(from, to) + 360) % 360;
+  el.textContent = `نقطه ${target.id}\nفاصله: ${d.toFixed(1)} m\nسمت: ${b.toFixed(0)}°`;
+  el.classList.remove('hidden');
+  if (!navLine) navLine = L.polyline([], { color: '#c3ff00', dashArray: '6,6' }).addTo(map);
+  navLine.setLatLngs([[lat, lon], [target.lat, target.lon]]);
 }
 
 function openWaypointsDialog() {
@@ -499,6 +577,8 @@ function initUI() {
   document.getElementById('export-kml').onclick = exportKML;
   const btnDXF = document.getElementById('export-dxf'); if (btnDXF) btnDXF.onclick = exportDXF;
   const btnShare = document.getElementById('share-files'); if (btnShare) btnShare.onclick = shareFilesIfSupported;
+  const btnImport = document.getElementById('import-data'); const inputImport = document.getElementById('import-file');
+  if (btnImport && inputImport) { btnImport.onclick = () => inputImport.click(); inputImport.onchange = onImportFile; }
 
   window.addEventListener('online', setOnlineStatus);
   window.addEventListener('offline', setOnlineStatus);
@@ -532,6 +612,15 @@ function initUI() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch(console.warn);
   }
+  // Track toggle
+  const btnTrack = document.getElementById('toggle-track');
+  if (btnTrack) btnTrack.onclick = () => { trackingEnabled = !trackingEnabled; btnTrack.textContent = trackingEnabled ? 'ثبت مسیر' : 'توقف مسیر'; toast(trackingEnabled ? 'ثبت مسیر فعال' : 'ثبت مسیر متوقف شد', 'success'); };
+  // Follow toggle
+  const btnFollow = document.getElementById('toggle-follow');
+  if (btnFollow) btnFollow.onclick = () => { followMode = !followMode; btnFollow.textContent = followMode ? 'خاموش کردن دنبال' : 'دنبال نقشه'; };
+  // Clear navigation
+  const btnClearNav = document.getElementById('clear-nav');
+  if (btnClearNav) btnClearNav.onclick = () => { setNavTarget(null); toast('ناوبری لغو شد', 'success'); };
 
   // Ripple effect delegation for all .btn
   document.body.addEventListener('click', (e) => {

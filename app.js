@@ -56,13 +56,40 @@ function initMap() {
     attributionControl: true,
   }).setView([35.6892, 51.3890], 13);
 
-  // Base layers
+  // Base layers (no API key): OSM, CARTO Dark, ESRI WorldImagery, and Stamen Toner Lite (traffic-like contrast)
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap', crossOrigin: true
+  });
   const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 20,
-    attribution: '© OpenStreetMap, © CARTO',
-    crossOrigin: true,
+    maxZoom: 20, attribution: '© OpenStreetMap, © CARTO', crossOrigin: true
+  });
+  const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye', crossOrigin: true
+  });
+  const tonerLite = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png', {
+    maxZoom: 20, attribution: 'Map tiles by Stamen Design, CC BY 3.0 — Map data © OpenStreetMap', crossOrigin: true
   });
   cartoDark.addTo(map);
+
+  // Simple traffic-style overlay: use Stamen Toner Lines over satellite/dark
+  const tonerLines = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lines/{z}/{x}/{y}.png', {
+    maxZoom: 20, opacity: 0.6, crossOrigin: true
+  });
+
+  L.control.layers(
+    {
+      'OSM': osm,
+      'Dark': cartoDark,
+      'Satellite (Esri)': esriSat,
+      'Toner Lite (روشن)': tonerLite,
+    },
+    {
+      'راه‌ها (Toner Lines)': tonerLines,
+      'آفلاین (MBTiles)': offlineLayer || L.layerGroup(),
+    },
+    { position: 'topright', collapsed: false }
+  ).addTo(map);
 
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
@@ -686,6 +713,8 @@ function initUI() {
   if (btnGoto) btnGoto.onclick = () => dlgGoto.showModal();
   if (closeGoto) closeGoto.onclick = () => dlgGoto.close();
   if (gotoSubmit) gotoSubmit.onclick = onGotoUtmSubmit;
+  const q39 = document.getElementById('utm-quick-39'); if (q39) q39.onclick = () => { document.getElementById('utm-zone').value = 39; };
+  const q40 = document.getElementById('utm-quick-40'); if (q40) q40.onclick = () => { document.getElementById('utm-zone').value = 40; };
 
   // Ripple effect delegation for all .btn
   document.body.addEventListener('click', (e) => {

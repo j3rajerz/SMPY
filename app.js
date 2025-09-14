@@ -9,6 +9,10 @@ let lastPosition = null;
 let trackCoords = [];
 let waypoints = [];
 const WAYPOINTS_KEY = 'fieldgps.waypoints.v1';
+let useOffline = false;
+let offlineLayer = null;
+let SQL = null;
+let mbtilesDb = null;
 
 // UTM helpers using proj4
 function getUtmZone(longitude) {
@@ -484,6 +488,35 @@ function initUI() {
   window.addEventListener('online', setOnlineStatus);
   window.addEventListener('offline', setOnlineStatus);
   setOnlineStatus();
+
+  // Offline toggle
+  const toggle = document.getElementById('toggle-offline');
+  if (toggle) toggle.onclick = () => {
+    useOffline = !useOffline;
+    toggle.textContent = useOffline ? 'آنلاین' : 'حالت آفلاین';
+    if (useOffline && offlineLayer) {
+      offlineLayer.addTo(map);
+    } else if (offlineLayer) {
+      map.removeLayer(offlineLayer);
+    }
+  };
+
+  // MBTiles input
+  const fileInput = document.getElementById('mbtiles-input');
+  if (fileInput) fileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    await ensureSqlLoaded();
+    const buf = await file.arrayBuffer();
+    mbtilesDb = new SQL.Database(new Uint8Array(buf));
+    offlineLayer = createMbtilesLayer(mbtilesDb);
+    if (useOffline) offlineLayer.addTo(map);
+  };
+
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js').catch(console.warn);
+  }
 }
 
 window.addEventListener('load', () => {
@@ -492,6 +525,57 @@ window.addEventListener('load', () => {
   loadWaypoints();
   requestHighAccuracyPosition();
 });
+
+async function ensureSqlLoaded() {
+  if (SQL) return SQL;
+  SQL = await window.initSqlJs({ locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${file}` });
+  return SQL;
+}
+
+function createMbtilesLayer(db) {
+  const stmt = db.prepare('SELECT value FROM metadata WHERE name = ?');
+  let minzoom = 0, maxzoom = 14;
+  try {
+    stmt.bind(['minzoom']); if (stmt.step()) minzoom = parseInt(stmt.get()[0]); stmt.reset();
+    stmt.bind(['maxzoom']); if (stmt.step()) maxzoom = parseInt(stmt.get()[0]);
+  } catch {}
+  stmt.free();
+
+  const layer = L.gridLayer({ minZoom: minzoom, maxZoom: maxzoom });
+  layer.createTile = function(coords) {
+    const tile = document.createElement('img');
+    tile.alt = '';
+    const png = getTilePng(db, coords.z, coords.x, coords.y);
+    if (png) {
+      const blob = new Blob([png], { type: 'image/png' });
+      tile.src = URL.createObjectURL(blob);
+    } else {
+      // empty tile
+      tile.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/ctQ3O0AAAAASUVORK5CYII=';
+    }
+    return tile;
+  };
+  return layer;
+}
+
+function tmsToZxyY(z, x, yTms) {
+  const y = Math.pow(2, z) - 1 - yTms; // TMS → XYZ
+  return { z, x, y };
+}
+
+function getTilePng(db, z, x, y) {
+  // MBTiles stores TMS y
+  const yTms = Math.pow(2, z) - 1 - y;
+  const stmt = db.prepare('SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?');
+  stmt.bind([z, x, yTms]);
+  let data = null;
+  if (stmt.step()) {
+    const val = stmt.getAsObject().tile_data; // Uint8Array
+    data = val;
+  }
+  stmt.free();
+  return data;
+}
 
 // Device orientation to update compass heading when GPS heading is absent
 function onOrientation(ev) {

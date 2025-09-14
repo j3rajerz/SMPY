@@ -1,5 +1,113 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <title>Field GPS — Military UI</title>
+    <meta name="theme-color" content="#0B1D14" />
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+
+    <!-- Leaflet Draw -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+    <!-- Turf.js for geometry calculations -->
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.1.0/turf.min.js"></script>
+
+    <!-- Proj4 for UTM conversion -->
+    <script src="https://cdn.jsdelivr.net/npm/proj4@2.12.1/dist/proj4.js"></script>
+
+    <!-- Leaflet Image (map snapshot) -->
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-image@0.0.4/leaflet-image.js"></script>
+
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">FIELD GPS</div>
+      <div class="header-status">
+        <span id="gps-status" class="badge offline">GPS</span>
+        <span id="online-status" class="badge online">ONLINE</span>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <section class="info-panel">
+        <div class="compass" title="Heading">
+          <div class="compass-rose">
+            <div class="needle needle-red" id="needle-red"></div>
+            <div class="needle needle-green" id="needle-green"></div>
+          </div>
+          <div class="heading" id="heading">—°</div>
+        </div>
+        <div class="readouts">
+          <div class="readout">
+            <label>UTM</label>
+            <div id="utm" class="mono">—</div>
+          </div>
+          <div class="readout small">
+            <label>Lat/Lon</label>
+            <div id="latlon" class="mono">—</div>
+          </div>
+          <div class="kpis">
+            <div><span>Alt</span><strong id="alt">—</strong><span>m</span></div>
+            <div><span>Speed</span><strong id="speed">—</strong><span>km/h</span></div>
+            <div><span>Acc</span><strong id="acc">—</strong><span>m</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="map-wrap">
+        <div id="map"></div>
+        <div id="measure-overlay" class="measure-overlay hidden"></div>
+      </section>
+
+      <nav class="action-bar">
+        <button id="btn-mark" class="btn primary">Mark Point</button>
+        <button id="btn-draw" class="btn">Draw on Map</button>
+        <button id="btn-waypoints" class="btn">Waypoints</button>
+        <button id="btn-print" class="btn accent">A4 / Download</button>
+      </nav>
+    </main>
+
+    <!-- Waypoints Modal -->
+    <dialog id="dlg-waypoints" class="modal">
+      <header>
+        <h3>Waypoints</h3>
+        <button class="icon" id="close-waypoints">✕</button>
+      </header>
+      <div class="modal-body">
+        <ul id="waypoint-list" class="waypoint-list"></ul>
+      </div>
+      <footer>
+        <button id="export-gpx" class="btn">Export GPX</button>
+        <button id="export-kml" class="btn">Export KML</button>
+      </footer>
+    </dialog>
+
+    <!-- A4 Preview Modal -->
+    <dialog id="dlg-a4" class="modal large">
+      <header>
+        <h3>A4 Preview</h3>
+        <button class="icon" id="close-a4">✕</button>
+      </header>
+      <div class="modal-body a4-body">
+        <canvas id="a4-canvas" width="1240" height="1754"></canvas>
+      </div>
+      <footer>
+        <button id="download-image" class="btn primary">Download PNG</button>
+      </footer>
+    </dialog>
+
+    <script src="./app.js"></script>
+  </body>
+  </html>
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

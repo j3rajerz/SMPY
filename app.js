@@ -392,31 +392,40 @@ function exportDXF() {
   downloadText('data.dxf', dxf, 'image/vnd.dxf');
 }
 
-function exportDXFDrawings() {
-  // Gather polylines/polygons from drawnItems and export as DXF (lat/lon space)
+function exportDXFDrawings(utmZone) {
+  // Gather polylines/polygons from drawnItems and export as DXF.
+  // If utmZone provided, convert lat/lon to UTM meters for that zone (north hemisphere by default).
   const header = [
     '0','SECTION','2','HEADER','0','ENDSEC',
     '0','SECTION','2','TABLES','0','ENDSEC',
     '0','SECTION','2','ENTITIES'
   ];
   const ents = [];
+  let forward = null;
+  if (Number.isFinite(utmZone)) {
+    const projStr = `+proj=utm +zone=${utmZone} +north +datum=WGS84 +units=m +no_defs`;
+    forward = proj4('EPSG:4326', projStr);
+  }
   drawnItems.eachLayer((layer) => {
     if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
       const pts = layer.getLatLngs();
-      ents.push('0','LWPOLYLINE','8','DRAWINGS','90',String(pts.length),'70','0');
-      for (const ll of pts) { ents.push('10',String(ll.lng),'20',String(ll.lat)); }
+      const xy = pts.map(ll => forward ? forward.forward([ll.lng, ll.lat]) : [ll.lng, ll.lat]);
+      ents.push('0','LWPOLYLINE','8','DRAWINGS','90',String(xy.length),'70','0');
+      for (const [x,y] of xy) { ents.push('10',String(x),'20',String(y)); }
     }
     if (layer instanceof L.Polygon) {
       const rings = layer.getLatLngs();
       const flat = Array.isArray(rings[0]) ? rings[0] : rings;
-      ents.push('0','LWPOLYLINE','8','DRAWINGS','90',String(flat.length + 1),'70','1');
-      for (const ll of flat) { ents.push('10',String(ll.lng),'20',String(ll.lat)); }
-      const first = flat[0]; ents.push('10',String(first.lng),'20',String(first.lat));
+      const xy = flat.map(ll => forward ? forward.forward([ll.lng, ll.lat]) : [ll.lng, ll.lat]);
+      ents.push('0','LWPOLYLINE','8','DRAWINGS','90',String(xy.length + 1),'70','1');
+      for (const [x,y] of xy) { ents.push('10',String(x),'20',String(y)); }
+      const [fx,fy] = xy[0]; ents.push('10',String(fx),'20',String(fy));
     }
   });
   const footer = ['0','ENDSEC','0','EOF'];
   const dxf = [...header, ...ents, ...footer].join('\n');
-  downloadText('drawings.dxf', dxf, 'image/vnd.dxf');
+  const name = Number.isFinite(utmZone) ? `drawings_utm${utmZone}.dxf` : 'drawings_wgs84.dxf';
+  downloadText(name, dxf, 'image/vnd.dxf');
 }
 
 async function shareFilesIfSupported() {
@@ -659,6 +668,10 @@ function initUI() {
   document.getElementById('export-kml').onclick = exportKML;
   const btnDXF = document.getElementById('export-dxf'); if (btnDXF) btnDXF.onclick = exportDXF;
   const btnDXFDraw = document.getElementById('export-dxf-drawings'); if (btnDXFDraw) btnDXFDraw.onclick = exportDXFDrawings;
+  // DXF UTM zone shortcuts
+  const d39 = document.getElementById('dxf-utm-39'); if (d39) d39.onclick = () => { exportDXFDrawings(39); };
+  const d40 = document.getElementById('dxf-utm-40'); if (d40) d40.onclick = () => { exportDXFDrawings(40); };
+  const dCus = document.getElementById('dxf-utm-custom'); if (dCus) dCus.addEventListener('change', () => { const z = parseInt(dCus.value); if (Number.isFinite(z)) exportDXFDrawings(z); });
   const btnShare = document.getElementById('share-files'); if (btnShare) btnShare.onclick = shareFilesIfSupported;
   const btnImport = document.getElementById('import-data'); const inputImport = document.getElementById('import-file');
   if (btnImport && inputImport) { btnImport.onclick = () => inputImport.click(); inputImport.onchange = onImportFile; }

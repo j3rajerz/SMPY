@@ -107,6 +107,12 @@
         <button id="export-kml" class="btn">خروجی KML</button>
         <button id="export-dxf" class="btn">خروجی DXF</button>
         <button id="export-dxf-drawings" class="btn">DXF ترسیمات</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="mono">زون UTM خروجی:</label>
+          <button id="dxf-utm-39" class="btn">39</button>
+          <button id="dxf-utm-40" class="btn">40</button>
+          <input id="dxf-utm-custom" class="btn" type="number" min="1" max="60" placeholder="زون دلخواه" style="max-width:130px;background:#0a0f0c;color:var(--text-phosphor)" />
+        </div>
         <button id="share-files" class="btn">اشتراک</button>
         <button id="import-data" class="btn">ورود GPX/KML</button>
         <input id="import-file" type="file" accept=".gpx,.kml,application/gpx+xml,application/vnd.google-earth.kml+xml" style="display:none" />

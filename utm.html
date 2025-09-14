@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نقشه UTM</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --bg: #f5f7fb;
+            --panel: #ffffff;
+            --border: #d9e1ee;
+            --primary: #1f3b5b;
+            --muted: #6b7a90;
+            --accent: #2f80ed;
+            --success: #00a884;
+            --danger: #e65252;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Vazirmatn, Tahoma, Arial, sans-serif;
+            background: var(--bg);
+            color: #1c1d21;
+        }
+        .app-header {
+            height: 64px;
+            background: #233a56;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+        }
+        .brand-badge {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: #fff; color: #233a56;
+            display: grid; place-items: center;
+            font-weight: 900;
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 16px;
+            padding: 16px;
+            height: calc(100vh - 64px);
+        }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+        .card-title {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 700; color: var(--primary);
+        }
+        .left-col { display: grid; grid-template-rows: 1fr auto; gap: 16px; }
+        .sketch-wrap { position: relative; }
+        .controls-stack { position: absolute; top: 10px; left: 10px; display: grid; gap: 10px; z-index: 2; }
+        .ctrl { background: #fff; border: 1px solid var(--border); border-radius: 100px; display: inline-flex; align-items: center; padding: 4px 10px; gap: 6px; box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+        .ctrl label { color: var(--muted); font-size: 12px; }
+        .ctrl .btn { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); background: #f6f8fc; cursor: pointer; font-weight: 700; }
+        .sketch {
+            height: 100%;
+            display: grid;
+        }
+        #plotSvg { width: 100%; height: 100%; }
+        .len-label { fill: #4a6482; font-weight: 800; }
+        .corner-label { fill: #ff4d4d; font-weight: 800; }
+        .right-col { display: grid; grid-template-rows: auto 1fr 1fr; gap: 16px; }
+        .info-list { padding: 10px 12px; display: grid; gap: 8px; }
+        .info-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+        .info-row .key { color: #6b7a90; font-weight: 600; }
+        .info-row .val { background: #233a56; color: #fff; padding: 6px 10px; border-radius: 6px; min-width: 140px; text-align: center; }
+        .map-box { height: 100%; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+        .leaflet-map { height: 100%; }
+        .coords-card { padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+        thead th { background: #e9eef7; color: var(--primary); font-weight: 800; padding: 8px; border-bottom: 1px solid var(--border); }
+        tbody td { padding: 8px; border-bottom: 1px solid var(--border); text-align: center; color: #2c3c53; }
+        @media (max-width: 1100px) {
+            .layout { grid-template-columns: 1fr; height: auto; }
+            .right-col { grid-template-rows: auto 360px 360px; }
+            .sketch-wrap { min-height: 420px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-header">
+        <div class="brand"><span class="brand-badge">JR</span><span>UTM نقشه</span></div>
+        <div></div>
+    </div>
+    <div class="layout">
+        <div class="left-col">
+            <div class="card sketch-wrap">
+                <div class="controls-stack">
+                    <div class="ctrl"><button class="btn" id="numGapMinus">-</button><label>فاصله عدد</label><button class="btn" id="numGapPlus">+</button></div>
+                    <div class="ctrl"><button class="btn" id="fontMinus">-</button><label>اندازه فونت</label><button class="btn" id="fontPlus">+</button></div>
+                    <div class="ctrl"><button class="btn" id="charGapMinus">-</button><label>فاصله حروف</label><button class="btn" id="charGapPlus">+</button></div>
+                </div>
+                <div class="sketch">
+                    <svg id="plotSvg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
+                        <defs>
+                            <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#a5c6ff" flood-opacity="0.5"/>
+                            </filter>
+                        </defs>
+                        <g id="plotGroup" transform="translate(220,140) rotate(-12)">
+                            <polygon id="plotPoly" points="0,320 80,80 360,20 420,300" fill="#cfe3ff" stroke="#4a9cff" stroke-width="3" filter="url(#softShadow)"/>
+                            <!-- corner labels -->
+                            <text class="corner-label" id="labelA" x="-10" y="330">A</text>
+                            <text class="corner-label" id="labelB" x="60" y="70">B</text>
+                            <text class="corner-label" id="labelC" x="360" y="10">C</text>
+                            <text class="corner-label" id="labelD" x="430" y="300">D</text>
+                            <!-- edge length labels -->
+                            <text class="len-label" id="lenAB">9.40</text>
+                            <text class="len-label" id="lenBC">9.31</text>
+                            <text class="len-label" id="lenCD">8.68</text>
+                            <text class="len-label" id="lenDA">8.56</text>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+            <div class="card coords-card">
+                <div class="card-title">مختصات نقاط</div>
+                <div style="padding: 10px;">
+                    <table>
+                        <thead>
+                            <tr><th>نقطه</th><th>X (متر)</th><th>Y (متر)</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>A</td><td>199833.2146</td><td>3507759.6214</td></tr>
+                            <tr><td>B</td><td>199830.2877</td><td>3507768.5515</td></tr>
+                            <tr><td>C</td><td>199839.4427</td><td>3507770.2240</td></tr>
+                            <tr><td>D</td><td>199841.4920</td><td>3507761.7903</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="right-col">
+            <div class="card">
+                <div class="info-list">
+                    <div class="info-row"><span class="key">مساحت:</span><span class="val">80.45 متر مربع</span></div>
+                    <div class="info-row"><span class="key">پلاک اصلی:</span><span class="val">-</span></div>
+                    <div class="info-row"><span class="key">شماره قطعه:</span><span class="val">282-285</span></div>
+                    <div class="info-row"><span class="key">بخش:</span><span class="val">مرکزی</span></div>
+                    <div class="info-row"><span class="key">موقعیت:</span><span class="val">علی آباد</span></div>
+                    <div class="info-row"><span class="key">مالک:</span><span class="val">زهرا احمدی علی‌آباد</span></div>
+                    <div class="info-row"><span class="key">نام پدر:</span><span class="val">یمنعلی</span></div>
+                    <div class="info-row"><span class="key">کد ملی:</span><span class="val">4459454173</span></div>
+                </div>
+            </div>
+            <div class="card map-box">
+                <div class="card-title">تصویر ماهواره‌ای</div>
+                <div id="satMap" class="leaflet-map"></div>
+            </div>
+            <div class="card map-box">
+                <div class="card-title">نقشه تراافیکی</div>
+                <div id="vecMap" class="leaflet-map"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- SVG helpers to place labels along edges
+        const state = { fontSize: 28, numOffset: 16, cornerOffset: 14 };
+        const poly = document.getElementById('plotPoly');
+        const lenAB = document.getElementById('lenAB');
+        const lenBC = document.getElementById('lenBC');
+        const lenCD = document.getElementById('lenCD');
+        const lenDA = document.getElementById('lenDA');
+        const corners = [
+            document.getElementById('labelA'),
+            document.getElementById('labelB'),
+            document.getElementById('labelC'),
+            document.getElementById('labelD')
+        ];
+
+        function mid(p1, p2) { return [(p1[0]+p2[0])/2, (p1[1]+p2[1])/2]; }
+        function unitNormal(p1, p2) {
+            const dx = p2[0]-p1[0], dy = p2[1]-p1[1];
+            const len = Math.hypot(dx, dy) || 1; return [-dy/len, dx/len];
+        }
+        function setTextAt(textEl, x, y, angle) {
+            textEl.setAttribute('x', x);
+            textEl.setAttribute('y', y);
+            textEl.setAttribute('font-size', state.fontSize);
+            textEl.setAttribute('transform', `translate(0,0) rotate(${angle} ${x} ${y})`);
+        }
+        function updateSketch() {
+            const pts = poly.getAttribute('points').trim().split(/\s+/).map(p=>p.split(',').map(Number));
+            // edges: A(0)->B(1)->C(2)->D(3)->A
+            const edges = [
+                [pts[0], pts[1], lenAB],
+                [pts[1], pts[2], lenBC],
+                [pts[2], pts[3], lenCD],
+                [pts[3], pts[0], lenDA]
+            ];
+            edges.forEach(([p1,p2,el])=>{
+                const m = mid(p1,p2); const n = unitNormal(p1,p2);
+                const angle = Math.atan2(p2[1]-p1[1], p2[0]-p1[0])*180/Math.PI;
+                setTextAt(el, m[0]+n[0]*state.numOffset, m[1]+n[1]*state.numOffset, angle);
+                el.style.letterSpacing = '1px';
+            });
+            // corners offset
+            const off = state.cornerOffset;
+            const pts2 = pts;
+            corners[0].setAttribute('x', pts2[0][0]-off);
+            corners[0].setAttribute('y', pts2[0][1]+off);
+            corners[1].setAttribute('x', pts2[1][0]-off);
+            corners[1].setAttribute('y', pts2[1][1]-off);
+            corners[2].setAttribute('x', pts2[2][0]+off*0.5);
+            corners[2].setAttribute('y', pts2[2][1]-off);
+            corners[3].setAttribute('x', pts2[3][0]+off*0.5);
+            corners[3].setAttribute('y', pts2[3][1]+off);
+            corners.forEach(c=>c.setAttribute('font-size', state.fontSize));
+        }
+        updateSketch();
+        document.getElementById('fontPlus').onclick = ()=>{ state.fontSize=Math.min(48,state.fontSize+2); updateSketch(); };
+        document.getElementById('fontMinus').onclick = ()=>{ state.fontSize=Math.max(14,state.fontSize-2); updateSketch(); };
+        document.getElementById('numGapPlus').onclick = ()=>{ state.numOffset=Math.min(60,state.numOffset+2); updateSketch(); };
+        document.getElementById('numGapMinus').onclick = ()=>{ state.numOffset=Math.max(6,state.numOffset-2); updateSketch(); };
+        document.getElementById('charGapPlus').onclick = ()=>{ state.cornerOffset=Math.min(40,state.cornerOffset+2); updateSketch(); };
+        document.getElementById('charGapMinus').onclick = ()=>{ state.cornerOffset=Math.max(6,state.cornerOffset-2); updateSketch(); };
+
+        // --- Leaflet maps
+        const sat = L.map('satMap', { zoomControl: true, attributionControl: false }).setView([35.7005, 51.392], 18);
+        L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0','mt1','mt2','mt3'] }).addTo(sat);
+        const rect = L.rectangle([[35.7002,51.3916],[35.7008,51.3924]], { color: '#ff3b30', weight: 2 });
+        rect.addTo(sat);
+
+        const vec = L.map('vecMap', { zoomControl: true }).setView([35.7005, 51.392], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(vec);
+        L.circleMarker([35.7005, 51.392], { radius: 4, color: '#ff3b30' }).addTo(vec);
+    </script>
+</body>
+</html>

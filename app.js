@@ -629,7 +629,9 @@ function openA4Preview() {
     // Simple north arrow
     drawNorthArrow(ctx, canvas.width - margin - 40, canvas.height - 60);
 
-    // Scale bar (approx, based on current zoom metersPerPixel)
+    // Scale bar and grid with selected scale
+    const scaleSelect = document.getElementById('a4-scale-select');
+    const denom = parseInt(scaleSelect?.value || '10000');
     drawScaleBar(ctx, dx, dy + drawH + 16, drawW);
 
     // Draw UTM grid (simple) every 1000 m if zoomed in enough
@@ -640,7 +642,8 @@ function openA4Preview() {
       const bottomRightLatLng = map.containerPointToLatLng([map.getSize().x, map.getSize().y]);
       const [minX, maxY] = proj.forward([topLeftLatLng.lng, topLeftLatLng.lat]);
       const [maxX, minY] = proj.forward([bottomRightLatLng.lng, bottomRightLatLng.lat]);
-      const step = 1000; // 1 km
+      // Step based on scale denominator (1:5000 => 500 m grid, 1:10000 => 1000 m)
+      const step = denom <= 5000 ? 500 : 1000;
       ctx.strokeStyle = 'rgba(166,255,0,0.2)'; ctx.lineWidth = 1;
       for (let x = Math.floor(minX/step)*step; x <= Math.ceil(maxX/step)*step; x += step) {
         const p1 = proj.inverse([x, minY]); const p2 = proj.inverse([x, maxY]);
@@ -649,6 +652,9 @@ function openA4Preview() {
         const ax = dx + (a.x / map.getSize().x) * drawW; const ay = dy + (a.y / map.getSize().y) * drawH;
         const bx = dx + (b.x / map.getSize().x) * drawW; const by = dy + (b.y / map.getSize().y) * drawH;
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        // Label Easting
+        ctx.fillStyle = '#a6ff00'; ctx.font = '12px IBM Plex Mono, monospace';
+        ctx.fillText(`E ${Math.round(x)}`, ax + 4, Math.min(ay + 14, dy + drawH - 4));
       }
       for (let y = Math.floor(minY/step)*step; y <= Math.ceil(maxY/step)*step; y += step) {
         const p1 = proj.inverse([minX, y]); const p2 = proj.inverse([maxX, y]);
@@ -657,6 +663,9 @@ function openA4Preview() {
         const ax = dx + (a.x / map.getSize().x) * drawW; const ay = dy + (a.y / map.getSize().y) * drawH;
         const bx = dx + (b.x / map.getSize().x) * drawW; const by = dy + (b.y / map.getSize().y) * drawH;
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        // Label Northing
+        ctx.fillStyle = '#a6ff00'; ctx.font = '12px IBM Plex Mono, monospace';
+        ctx.fillText(`N ${Math.round(y)}`, Math.min(bx - 64, dx + drawW - 64), ay - 4);
       }
     } catch {}
 

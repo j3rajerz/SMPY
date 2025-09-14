@@ -1,272 +1,1340 @@
 <!DOCTYPE html>
-<html lang="en" >
-<head>
-  <meta charset="UTF-8">
-  <title>SMPY</title>
-  
-
-</head>
-<body>
-<!-- partial:index.partial.html -->
-<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>سامانه مرتع‌پلاس شهرستان یزد (SMPY)</title>
-<link href="https://fonts.googleapis.com/css2?family=Vazirmatn&display=swap" rel="stylesheet">
-<style>
-  body {
-    margin: 0;
-    font-family: 'Vazirmatn', sans-serif;
-    background: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') no-repeat center center fixed;
-    background-size: cover;
-    color: #fff;
-    overflow-x: hidden;
-  }
-  .overlay {
-    background: rgba(0, 50, 0, 0.7);
-    padding: 1.5rem;
-    border-radius: 1.5rem;
-    margin: 1rem;
-    animation: fadeIn 1s ease;
-    box-shadow: 0 0 15px rgba(255,255,255,0.3);
-  }
-  @keyframes fadeIn {
-    0% { opacity: 0; transform: scale(0.9); }
-    100% { opacity: 1; transform: scale(1); }
-  }
-  h1, h2 {
-    text-align: center;
-    margin-bottom: 1rem;
-  }
-  input, select, button {
-    width: 100%;
-    padding: 1rem;
-    margin: 0.5rem 0;
-    border: none;
-    border-radius: 1rem;
-    font-size: 1rem;
-    box-sizing: border-box;
-  }
-  button {
-    background: linear-gradient(135deg, #4CAF50, #81C784);
-    color: white;
-    cursor: pointer;
-    transition: all 0.3s;
-  }
-  button:hover {
-    transform: scale(1.05);
-    background: linear-gradient(135deg, #45a049, #66bb6a);
-  }
-  .hidden { display: none; }
-  .menu, .form-section, .results, .manage-section { margin-top: 2rem; }
-  .total-score {
-    font-weight: bold;
-    font-size: 1.2rem;
-    text-align: center;
-    margin-top: 1rem;
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تاکتیکال ناو - سیستم نقشه‌برداری نظامی</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-color: #00FF00;
+            --highlight-color: #FFFF00;
+            --warning-color: #FF0000;
+            --border-color: #333333;
+            --button-color: #556B2F;
+            --modal-bg: #0A0A0A;
+            --section-bg: #0A0A0A;
+            --header-bg: #1A1A1A;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Tahoma', 'Courier New', monospace;
+            height: 100vh;
+            overflow: hidden;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        /* هدر اصلی */
+        .header {
+            background-color: var(--header-bg);
+            color: var(--highlight-color);
+            padding: 12px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 18px;
+            border-bottom: 2px solid var(--button-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+        
+        .time {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .app-title {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 16px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: var(--warning-color);
+        }
+        
+        .status-indicator.active {
+            background-color: var(--highlight-color);
+        }
+        
+        /* منوی اصلی */
+        .main-menu {
+            display: flex;
+            background-color: var(--button-color);
+            padding: 4px;
+            height: 50px;
+        }
+        
+        .menu-btn {
+            flex: 1;
+            background-color: transparent;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 4px;
+            margin: 0 2px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+        
+        .menu-btn.active {
+            background-color: var(--highlight-color);
+            color: var(--bg-color);
+            border-color: var(--highlight-color);
+        }
+        
+        /* محتوای اصلی */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .content-section {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .content-section.active {
+            display: flex;
+        }
+        
+        /* اطلاعات GPS */
+        .gps-info {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            padding: 10px;
+            background-color: var(--section-bg);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .info-item {
+            text-align: center;
+            padding: 5px;
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+        }
+        
+        .info-value {
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--highlight-color);
+            font-family: 'Courier New', monospace;
+        }
+        
+        .info-label {
+            font-size: 10px;
+            color: var(--text-color);
+            margin-top: 2px;
+        }
+        
+        /* کانتینر نقشه */
+        .map-container {
+            flex: 1;
+            position: relative;
+            background-color: var(--bg-color);
+        }
+        
+        .map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* کنترل‌ها */
+        .controls {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px;
+            background-color: var(--section-bg);
+            border-top: 1px solid var(--border-color);
+            height: 60px;
+        }
+        
+        .action-btn {
+            background-color: var(--button-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 3px;
+            min-width: 80px;
+        }
+        
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .action-btn.active {
+            background-color: var(--highlight-color);
+            color: var(--bg-color);
+        }
+        
+        /* بخش ماهواره‌ها */
+        .satellite-panel {
+            padding: 10px;
+            background-color: var(--section-bg);
+            margin: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+        }
+        
+        .panel-title {
+            color: var(--highlight-color);
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .satellite-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .satellite-item {
+            display: flex;
+            align-items: center;
+            padding: 5px;
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            background-color: rgba(0, 0, 0, 0.3);
+        }
+        
+        .sat-id {
+            width: 25px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: var(--highlight-color);
+        }
+        
+        .signal-bar {
+            flex: 1;
+            height: 8px;
+            background-color: var(--text-color);
+            margin: 0 5px;
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .signal-strength {
+            height: 100%;
+            background-color: var(--highlight-color);
+            width: 0%;
+        }
+        
+        .snr-value {
+            width: 25px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
+        
+        .snr-scale {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            padding: 0 10px;
+            font-size: 10px;
+            color: var(--text-color);
+        }
+        
+        /* مودال اطلاعات */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background-color: var(--modal-bg);
+            border: 2px solid var(--highlight-color);
+            border-radius: 5px;
+            padding: 20px;
+            width: 90%;
+            max-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            color: var(--highlight-color);
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 15px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 12px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 12px;
+            color: var(--text-color);
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 3px;
+            font-family: 'Tahoma', sans-serif;
+        }
+        
+        .form-group input:focus {
+            outline: 1px solid var(--highlight-color);
+        }
+        
+        .modal-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            gap: 10px;
+        }
+        
+        /* نتیجه نهایی */
+        .result-screen {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-color);
+            z-index: 900;
+        }
+        
+        .result-header {
+            padding: 12px;
+            background-color: var(--header-bg);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--button-color);
+            height: 60px;
+        }
+        
+        .result-title {
+            font-weight: bold;
+            color: var(--highlight-color);
+            font-size: 16px;
+        }
+        
+        .result-info {
+            padding: 15px;
+            background-color: var(--section-bg);
+            border-top: 1px solid var(--border-color);
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .info-section {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px dashed var(--border-color);
+        }
+        
+        .info-title {
+            color: var(--highlight-color);
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+        
+        .info-label {
+            color: var(--text-color);
+        }
+        
+        .info-value {
+            color: var(--highlight-color);
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .coordinates {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            margin-top: 5px;
+            padding: 5px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+        }
+        
+        .coord-line {
+            margin-bottom: 3px;
+        }
+        
+        .result-actions {
+            display: flex;
+            justify-content: space-around;
+            padding: 12px;
+            background-color: var(--header-bg);
+            border-top: 2px solid var(--button-color);
+            height: 60px;
+        }
+        
+        /* نشانگر موقعیت */
+        .current-marker {
+            background-color: var(--highlight-color);
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--bg-color);
+            box-shadow: 0 0 0 2px var(--warning-color);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0px rgba(255, 0, 0, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
+            100% { box-shadow: 0 0 0 0px rgba(255, 0, 0, 0); }
+        }
+        
+        /* پاورقی */
+        .footer {
+            display: flex;
+            justify-content: space-around;
+            padding: 8px;
+            background-color: var(--header-bg);
+            border-top: 1px solid var(--border-color);
+            height: 45px;
+        }
+        
+        .footer-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 5px;
+        }
+        
+        .footer-btn.active {
+            color: var(--highlight-color);
+            font-weight: bold;
+            border-bottom: 2px solid var(--highlight-color);
+        }
+        
+        /* اسکرول بار سفارشی */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--button-color);
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--highlight-color);
+        }
+        
+        /* رسپانسیو برای موبایل */
+        @media (max-width: 480px) {
+            .header {
+                padding: 8px;
+                font-size: 14px;
+            }
+            
+            .menu-btn {
+                font-size: 10px;
+                padding: 6px 2px;
+            }
+            
+            .action-btn {
+                font-size: 11px;
+                padding: 6px 8px;
+                min-width: 70px;
+            }
+            
+            .gps-info {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 5px;
+                padding: 8px;
+            }
+            
+            .info-value {
+                font-size: 12px;
+            }
+            
+            .info-label {
+                font-size: 9px;
+            }
+        }
+        
+        /* انیمیشن‌ها */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        /* حالت‌های مختلف */
+        .warning-text {
+            color: var(--warning-color);
+        }
+        
+        .success-text {
+            color: var(--highlight-color);
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-<div class="overlay" id="login-section">
-  <h1>ورود به سامانه مرتع‌پلاس (SMPY)</h1>
-  <input type="text" id="username" placeholder="نام کاربری">
-  <input type="password" id="password" placeholder="رمز عبور">
-  <button onclick="login()">ورود</button>
-</div>
+    <div class="container">
+        <!-- هدر اصلی -->
+        <div class="header">
+            <div class="time" id="currentTime">--:--</div>
+            <div class="app-title">TACTICAL NAV</div>
+            <div class="status-indicator" id="gpsStatusIndicator"></div>
+        </div>
+        
+        <!-- منوی اصلی -->
+        <div class="main-menu">
+            <button class="menu-btn active" id="btnCapture">برداشت نقاط</button>
+            <button class="menu-btn" id="btnDraw">ترسیم نقشه</button>
+            <button class="menu-btn" id="btnSatellite">ماهواره‌ها</button>
+            <button class="menu-btn" id="btnSettings">تنظیمات</button>
+        </div>
+        
+        <!-- محتوای اصلی -->
+        <div class="main-content">
+            
+            <!-- بخش برداشت نقاط -->
+            <div class="content-section active" id="sectionCapture">
+                <div class="gps-info">
+                    <div class="info-item">
+                        <div class="info-value" id="satelliteCount">0</div>
+                        <div class="info-label">ماهواره</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-value" id="gpsAccuracy">-- متر</div>
+                        <div class="info-label">دقت</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-value" id="gpsAltitude">-- متر</div>
+                        <div class="info-label">ارتفاع</div>
+                    </div>
+                </div>
+                
+                <div class="map-container">
+                    <div id="mapCapture" class="map"></div>
+                </div>
+                
+                <div class="controls">
+                    <button class="action-btn" id="btnCapturePoint">📌 برداشت نقطه</button>
+                    <button class="action-btn" id="btnReview" disabled>🔍 بررسی</button>
+                    <button class="action-btn" id="btnClear">♻️ پاک کردن</button>
+                </div>
+            </div>
+            
+            <!-- بخش ترسیم نقشه -->
+            <div class="content-section" id="sectionDraw">
+                <div class="map-container">
+                    <div id="mapDraw" class="map"></div>
+                </div>
+                
+                <div class="controls">
+                    <button class="action-btn" id="btnCurrentLocation">📍 موقعیت من</button>
+                    <button class="action-btn" id="btnStartDrawing">✏️ شروع ترسیم</button>
+                    <button class="action-btn" id="btnReviewDraw" disabled>🔍 بررسی</button>
+                </div>
+            </div>
+            
+            <!-- بخش ماهواره‌ها -->
+            <div class="content-section" id="sectionSatellite">
+                <div class="satellite-panel">
+                    <div class="panel-title">ماهواره‌های GPS</div>
+                    <div class="satellite-grid" id="gpsSatellites">
+                        <!-- ماهواره‌ها توسط جاوااسکریپت اضافه می‌شوند -->
+                    </div>
+                    <div class="snr-scale">
+                        <span>0</span>
+                        <span>10</span>
+                        <span>20</span>
+                        <span>30</span>
+                        <span>40+</span>
+                    </div>
+                </div>
+                
+                <div class="satellite-panel">
+                    <div class="panel-title">ماهواره‌های GLONASS</div>
+                    <div class="satellite-grid" id="glonassSatellites">
+                        <!-- ماهواره‌ها توسط جاوااسکریپت اضافه می‌شوند -->
+                    </div>
+                    <div class="snr-scale">
+                        <span>0</span>
+                        <span>10</span>
+                        <span>20</span>
+                        <span>30</span>
+                        <span>40+</span>
+                    </div>
+                </div>
+                
+                <div class="footer">
+                    <button class="footer-btn active">وضعیت</button>
+                    <button class="footer-btn">ماهواره</button>
+                    <button class="footer-btn">مسیرها</button>
+                    <button class="footer-btn">ثبت</button>
+                </div>
+            </div>
+            
+            <!-- بخش تنظیمات -->
+            <div class="content-section" id="sectionSettings">
+                <div class="satellite-panel">
+                    <div class="panel-title">تنظیمات سیستم</div>
+                    <div class="form-group">
+                        <label>دقت مورد نیاز (متر)</label>
+                        <input type="number" id="settingAccuracy" value="5" min="1" max="50">
+                    </div>
+                    <div class="form-group">
+                        <label>فرمت مختصات</label>
+                        <select id="settingCoordinateFormat" style="width: 100%; padding: 8px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 3px;">
+                            <option value="decimal">Decimal Degrees</option>
+                            <option value="dms">DMS</option>
+                            <option value="utm">UTM</option>
+                            <option value="mgrs">MGRS</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>ذخیره‌سازی خودکار</label>
+                        <input type="checkbox" id="settingAutoSave" checked style="margin-left: 10px;">
+                    </div>
+                </div>
+                
+                <div class="controls">
+                    <button class="action-btn" id="btnSaveSettings">💾 ذخیره تنظیمات</button>
+                    <button class="action-btn" id="btnReset">🔄 بازنشانی</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- مودال اطلاعات مالک -->
+    <div class="modal-overlay" id="modalOwner">
+        <div class="modal-content">
+            <div class="modal-header">اطلاعات متصرف</div>
+            
+            <div class="form-group">
+                <label>نام مالک *</label>
+                <input type="text" id="ownerName" placeholder="نام">
+            </div>
+            
+            <div class="form-group">
+                <label>نام خانوادگی *</label>
+                <input type="text" id="ownerLastName" placeholder="نام خانوادگی">
+            </div>
+            
+            <div class="form-group">
+                <label>نام پدر *</label>
+                <input type="text" id="ownerFatherName" placeholder="نام پدر">
+            </div>
+            
+            <div class="form-group">
+                <label>کد ملی *</label>
+                <input type="text" id="ownerNationalId" placeholder="کد ملی" maxlength="10">
+            </div>
+            
+            <div class="form-group">
+                <label>بخش</label>
+                <input type="text" id="ownerSection" placeholder="بخش">
+            </div>
+            
+            <div class="form-group">
+                <label>پلاک اصلی</label>
+                <input type="text" id="ownerMainPlate" placeholder="پلاک اصلی">
+            </div>
+            
+            <div class="form-group">
+                <label>پلاک فرعی</label>
+                <input type="text" id="ownerSubPlate" placeholder="پلاک فرعی">
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="action-btn" id="btnCancel">❌ انصراف</button>
+                <button class="action-btn" id="btnSubmit">✅ ثبت نهایی</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- صفحه نتیجه نهایی -->
+    <div class="result-screen" id="resultScreen">
+        <div class="result-header">
+            <div class="result-title">نقشه متصرفات - نتیجه نهایی</div>
+            <div class="time" id="resultTime">--:--</div>
+        </div>
+        
+        <div class="map-container">
+            <div id="mapResult" class="map"></div>
+        </div>
+        
+        <div class="result-info">
+            <div class="info-section">
+                <div class="info-title">📋 مشخصات زمین</div>
+                <div class="info-row">
+                    <span class="info-label">مساحت:</span>
+                    <span class="info-value" id="resultArea">4382 متر مربع</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">پلاک اصلی:</span>
+                    <span class="info-value" id="resultMainPlate">1234</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">بخش:</span>
+                    <span class="info-value" id="resultSection">نیر</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">منطقه:</span>
+                    <span class="info-value" id="resultRegion">در گل</span>
+                </div>
+            </div>
+            
+            <div class="info-section">
+                <div class="info-title">👤 مشخصات مالک</div>
+                <div class="info-row">
+                    <span class="info-label">نام کامل:</span>
+                    <span class="info-value" id="resultOwnerName">خانم کنیزمحمد مرادی</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">نام پدر:</span>
+                    <span class="info-value" id="resultFatherName">اهلل داد</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">کد ملی:</span>
+                    <span class="info-value" id="resultNationalId">3333/33/2023</span>
+                </div>
+            </div>
+            
+            <div class="info-section">
+                <div class="info-title">📍 مختصات مرزی</div>
+                <div class="coordinates" id="resultCoordinates">
+                    <!-- مختصات توسط جاوااسکریپت اضافه می‌شوند -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="result-actions">
+            <button class="action-btn" id="btnShare">📤 اشتراک گذاری</button>
+            <button class="action-btn" id="btnSave">💾 ذخیره PDF</button>
+            <button class="action-btn" id="btnCloseResult">❌ بستن</button>
+        </div>
+    </div>
 
-<div class="overlay hidden" id="menu-section">
-  <h1>سامانه مرتع‌پلاس شهرستان یزد (SMPY)</h1>
-  <button onclick="showForm()">ثبت درخواست جدید</button>
-  <button onclick="showManage()">مدیریت درخواست‌ها</button>
-  <button onclick="logout()">خروج از سیستم</button>
-</div>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // پایگاه داده و متغیرهای جهانی
+        const AppState = {
+            currentView: 'capture',
+            gpsStatus: 'inactive',
+            capturedPoints: [],
+            drawnPoints: [],
+            isDrawing: false,
+            currentPosition: null,
+            satellites: {
+                gps: [],
+                glonass: []
+            },
+            ownerData: null,
+            settings: {
+                requiredAccuracy: 5,
+                coordinateFormat: 'decimal',
+                autoSave: true
+            }
+        };
 
-<div class="overlay hidden" id="form-section">
-  <h2>ثبت اطلاعات</h2>
-  <input type="text" id="requester" placeholder="نام درخواست کننده">
-  <input type="number" id="coverPercent" placeholder="درصد پوشش گیاهی">
-  <input type="number" id="rockPercent" placeholder="درصد سنگریزه">
-  <select id="plantType">
-    <option value="">انتخاب نوع گونه</option>
-    <option value="علف یک‌ساله">علف یک‌ساله</option>
-    <option value="شور">شور</option>
-    <option value="درمنه">درمنه</option>
-    <option value="رمس">رمس</option>
-    <option value="قیچ">قیچ</option>
-    <option value="تاغ">تاغ</option>
-    <option value="گز">گز</option>
-    <option value="بادام‌کوهی">بادام‌کوهی</option>
-  </select>
-  <button onclick="calculate()">محاسبه</button>
-  <button onclick="backToMenu()">بازگشت به منو</button>
-</div>
+        // نقشه‌ها
+        let mapCapture, mapDraw, mapResult;
+        let currentMarker = null;
+        let drawnPolygon = null;
+        let gpsWatchId = null;
 
-<div class="overlay hidden" id="results-section">
-  <h2>نتایج</h2>
-  <div id="resultContent"></div>
-  <div class="total-score" id="totalScore"></div>
-  <button onclick="backToMenu()">بازگشت به منو</button>
-</div>
+        // عناصر DOM
+        const elements = {
+            time: document.getElementById('currentTime'),
+            gpsStatus: document.getElementById('gpsStatusIndicator'),
+            satelliteCount: document.getElementById('satelliteCount'),
+            gpsAccuracy: document.getElementById('gpsAccuracy'),
+            gpsAltitude: document.getElementById('gpsAltitude'),
+            modalOwner: document.getElementById('modalOwner'),
+            resultScreen: document.getElementById('resultScreen'),
+            resultTime: document.getElementById('resultTime'),
+            resultArea: document.getElementById('resultArea'),
+            resultMainPlate: document.getElementById('resultMainPlate'),
+            resultSection: document.getElementById('resultSection'),
+            resultRegion: document.getElementById('resultRegion'),
+            resultOwnerName: document.getElementById('resultOwnerName'),
+            resultFatherName: document.getElementById('resultFatherName'),
+            resultNationalId: document.getElementById('resultNationalId'),
+            resultCoordinates: document.getElementById('resultCoordinates'),
+            gpsSatellites: document.getElementById('gpsSatellites'),
+            glonassSatellites: document.getElementById('glonassSatellites')
+        };
 
-<div class="overlay hidden" id="manage-section">
-  <h2>مدیریت درخواست‌ها</h2>
-  <select id="requestList" onchange="loadRequest()"></select>
-  <button onclick="deleteRequest()">حذف درخواست</button>
-  <button onclick="editRequest()">ویرایش درخواست</button>
-  <button onclick="backToMenu()">بازگشت به منو</button>
-</div>
+        // توابع اصلی
+        function initializeApp() {
+            setupEventListeners();
+            initializeMaps();
+            startGPSTracking();
+            updateTime();
+            simulateSatelliteData();
+            loadSettings();
+            
+            setInterval(updateTime, 1000);
+            setInterval(updateSatelliteDisplay, 2000);
+        }
 
-<script>
-let requests = JSON.parse(localStorage.getItem('requests')) || [];
-let editMode = false;
-let editIndex = null;
+        function setupEventListeners() {
+            // منوی اصلی
+            document.getElementById('btnCapture').addEventListener('click', () => switchView('capture'));
+            document.getElementById('btnDraw').addEventListener('click', () => switchView('draw'));
+            document.getElementById('btnSatellite').addEventListener('click', () => switchView('satellite'));
+            document.getElementById('btnSettings').addEventListener('click', () => switchView('settings'));
+            
+            // کنترل‌های برداشت
+            document.getElementById('btnCapturePoint').addEventListener('click', capturePoint);
+            document.getElementById('btnReview').addEventListener('click', showOwnerModal);
+            document.getElementById('btnClear').addEventListener('click', clearPoints);
+            
+            // کنترل‌های ترسیم
+            document.getElementById('btnCurrentLocation').addEventListener('click', centerOnLocation);
+            document.getElementById('btnStartDrawing').addEventListener('click', toggleDrawing);
+            document.getElementById('btnReviewDraw').addEventListener('click', showOwnerModal);
+            
+            // مودال مالک
+            document.getElementById('btnCancel').addEventListener('click', hideOwnerModal);
+            document.getElementById('btnSubmit').addEventListener('click', submitOwnerData);
+            
+            // نتیجه
+            document.getElementById('btnShare').addEventListener('click', shareResult);
+            document.getElementById('btnSave').addEventListener('click', saveResult);
+            document.getElementById('btnCloseResult').addEventListener('click', closeResult);
+            
+            // تنظیمات
+            document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
+            document.getElementById('btnReset').addEventListener('click', resetSettings);
+        }
 
-function saveRequests() {
-  localStorage.setItem('requests', JSON.stringify(requests));
-}
+        function initializeMaps() {
+            // نقشه برداشت
+            mapCapture = L.map('mapCapture').setView([35.6892, 51.3890], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(mapCapture);
+            
+            // نقشه ترسیم
+            mapDraw = L.map('mapDraw').setView([35.6892, 51.3890], 15);
+            L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: 'Google Satellite'
+            }).addTo(mapDraw);
+            
+            // نقشه نتیجه
+            mapResult = L.map('mapResult').setView([35.6892, 51.3890], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(mapResult);
+        }
 
-function login() {
-  const user = document.getElementById('username').value;
-  const pass = document.getElementById('password').value;
-  if (user === 'abbas' && pass === '1396') {
-    document.getElementById('login-section').classList.add('hidden');
-    document.getElementById('menu-section').classList.remove('hidden');
-  } else {
-    alert('نام کاربری یا رمز عبور اشتباه است');
-  }
-}
+        function startGPSTracking() {
+            if (!navigator.geolocation) {
+                showError('دسترسی به موقعیت جغرافیایی پشتیبانی نمی‌شود');
+                return;
+            }
+            
+            gpsWatchId = navigator.geolocation.watchPosition(
+                handlePositionUpdate,
+                handlePositionError,
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 30000,
+                    timeout: 27000
+                }
+            );
+        }
 
-function showForm() {
-  document.getElementById('menu-section').classList.add('hidden');
-  document.getElementById('form-section').classList.remove('hidden');
-}
+        function handlePositionUpdate(position) {
+            AppState.currentPosition = position;
+            AppState.gpsStatus = 'active';
+            
+            const coords = position.coords;
+            updateGPSDisplay(coords);
+            updateMapPosition(coords);
+            
+            elements.gpsStatus.classList.add('active');
+        }
 
-function backToMenu() {
-  document.querySelectorAll('.overlay').forEach(sec => sec.classList.add('hidden'));
-  document.getElementById('menu-section').classList.remove('hidden');
-}
+        function handlePositionError(error) {
+            AppState.gpsStatus = 'error';
+            elements.gpsStatus.classList.remove('active');
+            
+            let errorMsg = 'خطا در دریافت موقعیت: ';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMsg += 'دسترسی رد شد';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMsg += 'موقعیت در دسترس نیست';
+                    break;
+                case error.TIMEOUT:
+                    errorMsg += 'زمان دریافت موقعیت به پایان رسید';
+                    break;
+                default:
+                    errorMsg += 'خطای ناشناخته';
+            }
+            
+            showError(errorMsg);
+        }
 
-function calculate() {
-  const requester = document.getElementById('requester').value;
-  const cover = parseFloat(document.getElementById('coverPercent').value);
-  const rock = parseFloat(document.getElementById('rockPercent').value);
-  const type = document.getElementById('plantType').value;
+        function updateGPSDisplay(coords) {
+            elements.satelliteCount.textContent = Math.max(4, Math.min(12, Math.floor(20 - (coords.accuracy / 5))));
+            elements.gpsAccuracy.textContent = Math.round(coords.accuracy) + ' متر';
+            elements.gpsAltitude.textContent = coords.altitude ? Math.round(coords.altitude) + ' متر' : '-- متر';
+        }
 
-  if (!requester || isNaN(cover) || isNaN(rock) || !type) {
-    alert('لطفاً همه فیلدها را پر کنید.');
-    return;
-  }
+        function updateMapPosition(coords) {
+            const latLng = [coords.latitude, coords.longitude];
+            
+            if (currentMarker) {
+                currentMarker.setLatLng(latLng);
+            } else {
+                currentMarker = L.marker(latLng, {
+                    icon: L.divIcon({ className: 'current-marker', iconSize: [18, 18] })
+                }).addTo(mapCapture);
+            }
+            
+            if (AppState.currentView === 'capture') {
+                mapCapture.setView(latLng);
+            }
+        }
 
-  let results = {};
-  let forageBase = cover < 10 ? cover * 4 : cover * 6;
-  results.forage = evaluateScore(forageBase, [[0,10,0],[10,20,1,4],[20,30,5,9],[30,40,10,14],[40,50,15,19],[50,100,20]]);
-  results.coverScore = evaluateScore(cover, [[0,3,0],[3,6,1,4],[6,9,5,9],[9,12,10,14],[12,15,15,19],[15,100,20]]);
-  results.grazing = evaluateScore(cover, [[0,4,0],[4,8,1,3],[8,12,4,7],[12,16,8,13],[16,20,12,14],[20,100,15]]);
-  let harvestBase = cover < 10 ? cover * 4 : cover * 6;
-  results.harvest = evaluateScore(harvestBase, [[0,4,0],[4,8,1,3],[8,12,4,7],[12,16,8,11],[16,20,12,14],[20,100,15]]);
-  let totalCover = cover + rock;
-  results.soilProtect = evaluateScore(totalCover, [[0,5,0],[5,8,1,3],[8,12,4,7],[12,16,8,11],[16,20,12,14],[20,100,15]]);
-  results.erosion = evaluateErosion(type);
+        function capturePoint() {
+            if (!AppState.currentPosition) {
+                showError('موقعیت GPS در دسترس نیست');
+                return;
+            }
+            
+            const coords = AppState.currentPosition.coords;
+            if (coords.accuracy > AppState.settings.requiredAccuracy * 3) {
+                showError(`دقت موقعیت یافی کافی نیست. دقت فعلی: ${Math.round(coords.accuracy)} متر`);
+                return;
+            }
+            
+            const point = {
+                lat: coords.latitude,
+                lng: coords.longitude,
+                accuracy: coords.accuracy,
+                timestamp: new Date().toISOString(),
+                altitude: coords.altitude
+            };
+            
+            AppState.capturedPoints.push(point);
+            
+            // نمایش نقطه روی نقشه
+            L.marker([point.lat, point.lng])
+                .addTo(mapCapture)
+                .bindPopup(`نقطه ${AppState.capturedPoints.length}<br>دقت: ${Math.round(point.accuracy)}m`)
+                .openPopup();
+            
+            // فعال کردن دکمه بررسی
+            if (AppState.capturedPoints.length >= 2) {
+                document.getElementById('btnReview').disabled = false;
+            }
+            
+            showSuccess(`نقطه ${AppState.capturedPoints.length} با موفقیت ثبت شد`);
+        }
 
-  let total = results.forage + results.coverScore + results.grazing + results.harvest + results.soilProtect + results.erosion;
+        function switchView(viewName) {
+            AppState.currentView = viewName;
+            
+            // به‌روزرسانی دکمه‌های منو
+            document.querySelectorAll('.menu-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
+            
+            document.getElementById(`btn${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`).classList.add('active');
+            document.getElementById(`section${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`).classList.add('active');
+            
+            // به‌روزرسانی نقشه‌ها
+            setTimeout(() => {
+                if (viewName === 'capture' && mapCapture) {
+                    mapCapture.invalidateSize();
+                } else if (viewName === 'draw' && mapDraw) {
+                    mapDraw.invalidateSize();
+                }
+            }, 100);
+        }
 
-  if (editMode) {
-    requests[editIndex] = { requester, results, total };
-    editMode = false;
-  } else {
-    requests.push({ requester, results, total });
-  }
+        function showOwnerModal() {
+            elements.modalOwner.style.display = 'flex';
+        }
 
-  saveRequests();
-  document.getElementById('form-section').classList.add('hidden');
-  document.getElementById('results-section').classList.remove('hidden');
-  showResults(results, total);
-}
+        function hideOwnerModal() {
+            elements.modalOwner.style.display = 'none';
+        }
 
-function evaluateScore(value, ranges) {
-  for (const r of ranges) {
-    if (value >= r[0] && value < r[1]) {
-      if (r.length === 3) return r[2];
-      return (r[2] + r[3]) / 2;
-    }
-  }
-  return 0;
-}
+        function submitOwnerData() {
+            const ownerData = {
+                name: document.getElementById('ownerName').value,
+                lastName: document.getElementById('ownerLastName').value,
+                fatherName: document.getElementById('ownerFatherName').value,
+                nationalId: document.getElementById('ownerNationalId').value,
+                section: document.getElementById('ownerSection').value,
+                mainPlate: document.getElementById('ownerMainPlate').value,
+                subPlate: document.getElementById('ownerSubPlate').value
+            };
+            
+            // اعتبارسنجی
+            if (!ownerData.name || !ownerData.lastName || !ownerData.fatherName || !ownerData.nationalId) {
+                showError('لطفاً اطلاعات ضروری را تکمیل کنید');
+                return;
+            }
+            
+            AppState.ownerData = ownerData;
+            hideOwnerModal();
+            showFinalResult();
+        }
 
-function evaluateErosion(type) {
-  if (["شور","علف یک‌ساله"].includes(type)) return 1;
-  if (["درمنه","رمس","قیچ"].includes(type)) return 2;
-  if (["درمنه","رمس","قیچ","تاغ","گز","بادام‌کوهی"].includes(type)) return 3;
-  if (["تاغ","گز","بادام‌کوهی"].includes(type)) return 4;
-  return 0;
-}
+        function showFinalResult() {
+            // محاسبه مساحت (ساده‌سازی شده)
+            const area = calculateArea(AppState.capturedPoints);
+            elements.resultArea.textContent = `${area} متر مربع`;
+            
+            // پر کردن اطلاعات مالک
+            if (AppState.ownerData) {
+                elements.resultOwnerName.textContent = `${AppState.ownerData.name} ${AppState.ownerData.lastName}`;
+                elements.resultFatherName.textContent = AppState.ownerData.fatherName;
+                elements.resultNationalId.textContent = AppState.ownerData.nationalId;
+                elements.resultMainPlate.textContent = AppState.ownerData.mainPlate || '--';
+                elements.resultSection.textContent = AppState.ownerData.section || '--';
+            }
+            
+            // نمایش مختصات
+            elements.resultCoordinates.innerHTML = '';
+            AppState.capturedPoints.forEach((point, index) => {
+                const coordLine = document.createElement('div');
+                coordLine.className = 'coord-line';
+                coordLine.textContent = `نقطه ${index + 1}: ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)} (دقت: ${Math.round(point.accuracy)}m)`;
+                elements.resultCoordinates.appendChild(coordLine);
+            });
+            
+            // رسم نقشه نهایی
+            drawFinalMap();
+            
+            // نمایش صفحه نتیجه
+            elements.resultScreen.style.display = 'flex';
+            elements.resultTime.textContent = new Date().toLocaleTimeString('fa-IR');
+        }
 
-function showResults(results, total) {
-  const resDiv = document.getElementById('resultContent');
-  resDiv.innerHTML = `
-    <p>تولید کل علوفه: ${results.forage}</p>
-    <p>درصد تاج پوشش گیاهی: ${results.coverScore}</p>
-    <p>درصد گونه‌های مورد چرای دام: ${results.grazing}</p>
-    <p>درصد علوفه قابل برداشت مجاز: ${results.harvest}</p>
-    <p>حفاظت خاک: ${results.soilProtect}</p>
-    <p>فرسایش خاک: ${results.erosion}</p>
-  `;
-  document.getElementById('totalScore').textContent = `مجموع امتیازات: ${total}`;
-}
+        function drawFinalMap() {
+            // پاک کردن نقشه قبلی
+            mapResult.eachLayer(layer => {
+                if (layer instanceof L.TileLayer) return;
+                mapResult.removeLayer(layer);
+            });
+            
+            // رسم پلیگون
+            const points = AppState.capturedPoints.map(p => [p.lat, p.lng]);
+            if (points.length >= 3) {
+                const polygon = L.polygon(points, {
+                    color: 'red',
+                    fillOpacity: 0.2,
+                    weight: 3
+                }).addTo(mapResult);
+                
+                // اضافه کردن مارکرها
+                points.forEach((point, index) => {
+                    L.marker(point)
+                        .addTo(mapResult)
+                        .bindPopup(`نقطه ${index + 1}<br>${point[0].toFixed(6)}, ${point[1].toFixed(6)}`);
+                });
+                
+                mapResult.fitBounds(polygon.getBounds());
+            }
+        }
 
-function showManage() {
-  document.getElementById('menu-section').classList.add('hidden');
-  document.getElementById('manage-section').classList.remove('hidden');
-  refreshList();
-}
+        function calculateArea(points) {
+            // محاسبه ساده مساحت (در نسخه واقعی از الگوریتم دقیق‌تر استفاده شود)
+            if (points.length < 3) return 0;
+            
+            // محاسبه مساحت با فرمول shoelace
+            let area = 0;
+            for (let i = 0; i < points.length; i++) {
+                const j = (i + 1) % points.length;
+                area += points[i].lng * points[j].lat;
+                area -= points[j].lng * points[i].lat;
+            }
+            
+            return Math.abs(Math.round(area / 2 * 1000000)); // تقریب به متر مربع
+        }
 
-function refreshList() {
-  const select = document.getElementById('requestList');
-  select.innerHTML = '';
-  requests.forEach((r, i) => {
-    let option = document.createElement('option');
-    option.value = i;
-    option.textContent = r.requester + ` (امتیاز: ${r.total})`;
-    select.appendChild(option);
-  });
-}
+        function simulateSatelliteData() {
+            // شبیه‌سازی داده‌های ماهواره‌ای GPS
+            for (let i = 1; i <= 12; i++) {
+                AppState.satellites.gps.push({
+                    id: i,
+                    snr: Math.floor(Math.random() * 40) + 1,
+                    active: Math.random() > 0.3
+                });
+            }
+            
+            // شبیه‌سازی داده‌های ماهواره‌ای GLONASS
+            for (let i = 1; i <= 8; i++) {
+                AppState.satellites.glonass.push({
+                    id: i + 64, // IDهای GLONASS معمولاً بالای 64 هستند
+                    snr: Math.floor(Math.random() * 40) + 1,
+                    active: Math.random() > 0.4
+                });
+            }
+        }
 
-function loadRequest() {
-  const idx = document.getElementById('requestList').value;
-  if (idx !== '') showResults(requests[idx].results, requests[idx].total);
-}
+        function updateSatelliteDisplay() {
+            // به‌روزرسانی نمایش ماهواره‌های GPS
+            elements.gpsSatellites.innerHTML = '';
+            AppState.satellites.gps.forEach(sat => {
+                const satElement = createSatelliteElement(sat);
+                elements.gpsSatellites.appendChild(satElement);
+            });
+            
+            // به‌روزرسانی نمایش ماهواره‌های GLONASS
+            elements.glonassSatellites.innerHTML = '';
+            AppState.satellites.glonass.forEach(sat => {
+                const satElement = createSatelliteElement(sat);
+                elements.glonassSatellites.appendChild(satElement);
+            });
+        }
 
-function deleteRequest() {
-  const idx = document.getElementById('requestList').value;
-  if (idx !== '') {
-    requests.splice(idx,1);
-    saveRequests();
-    refreshList();
-  }
-}
+        function createSatelliteElement(satellite) {
+            const div = document.createElement('div');
+            div.className = 'satellite-item';
+            
+            const idSpan = document.createElement('span');
+            idSpan.className = 'sat-id';
+            idSpan.textContent = satellite.id;
+            
+            const signalDiv = document.createElement('div');
+            signalDiv.className = 'signal-bar';
+            
+            const strengthDiv = document.createElement('div');
+            strengthDiv.className = 'signal-strength';
+            strengthDiv.style.width = `${Math.min(100, (satellite.snr / 40) * 100)}%`;
+            strengthDiv.style.backgroundColor = satellite.active ? 'var(--highlight-color)' : 'var(--warning-color)';
+            
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'snr-value';
+            valueSpan.textContent = satellite.snr;
+            
+            signalDiv.appendChild(strengthDiv);
+            div.appendChild(idSpan);
+            div.appendChild(signalDiv);
+            div.appendChild(valueSpan);
+            
+            return div;
+        }
 
-function editRequest() {
-  const idx = document.getElementById('requestList').value;
-  if (idx !== '') {
-    editMode = true;
-    editIndex = idx;
-    const data = requests[idx];
-    document.getElementById('requester').value = data.requester;
-    backToMenu();
-    showForm();
-  }
-}
+        function updateTime() {
+            const now = new Date();
+            elements.time.textContent = now.toLocaleTimeString('fa-IR');
+        }
 
-function logout() {
-  location.reload();
-}
-</script>
-</body>
-</html>
-<!-- partial -->
-  
+        function showError(message) {
+            alert(`❌ خطا: ${message}`);
+        }
+
+        function showSuccess(message) {
+            // می‌توانید از toast notification استفاده کنید
+            console.log(`✅ ${message}`);
+        }
+
+        function clearPoints() {
+            AppState.capturedPoints = [];
+            mapCapture.eachLayer(layer => {
+                if (!(layer instanceof L.TileLayer) && layer !== currentMarker) {
+                    mapCapture.removeLayer(layer);
+                }
+            });
+            document.getElementById('btnReview').disabled = true;
+            showSuccess('همه نقاط پاک شدند');
+        }
+
+        function centerOnLocation() {
+            if (AppState.currentPosition) {
+                const coords = AppState.currentPosition.coords;
+                mapDraw.setView([coords.latitude, coords.longitude], 17);
+            }
+        }
+
+        function toggleDrawing() {
+            AppState.isDrawing = !AppState.isDrawing;
+            const btn = document.getElementById('btnStartDrawing');
+            
+            if (AppState.isDrawing) {
+                btn.textContent = '⏹️ توقف ترسیم';
+                btn.classList.add('active');
+                mapDraw.on('click', handleMapClick);
+                showSuccess('حالت ترسیم فعال شد');
+            } else {
+                btn.textContent = '✏️ شروع ترسیم';
+                btn.classList.remove('active');
+                mapDraw.off('click', handleMapClick);
+                
+                if (AppState.drawnPoints.length >= 3) {
+                    document.getElementById('btnReviewDraw').disabled = false;
+                }
+                
+                showSuccess('حالت ترسیم غیرفعال شد');
+            }
+        }
+
+        function handleMapClick(e) {
+            AppState.drawnPoints.push({
+                lat: e.latlng.lat,
+                lng: e.latlng.lng,
+                timestamp: new Date().toISOString()
+            });
+            
+            // نمایش نقطه
+            L.marker(e.latlng)
+                .addTo(mapDraw)
+                .bindPopup(`نقطه ${AppState.drawnPoints.length}<br>${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`)
+                .openPopup();
+            
+            // رسم خطوط
+            updateDrawnPolygon();
+        }
+
+        function updateDrawnPolygon() {
+            if (drawnPolygon) {
+                mapDraw.removeLayer(drawnPolygon);
+            }
+            
+            const points = AppState.drawnPoints.map(p => [p.lat, p.lng]);
+            if (points.length >= 2) {
+                drawnPolygon = L.polyline(points, { color: 'red', weight: 3 }).addTo(mapDraw);
+            }
+            
+            if (points.length >= 3) {
+                drawnPolygon = L.polygon(points, { 
+                    color: 'red', 
+                    fillOpacity: 0.2,
+                    weight: 3 
+                }).addTo(mapDraw);
+            }
+        }
+
+        function shareResult() {
+            showSuccess('امکان اشتراک‌گذاری در نسخه کامل فعال می‌شود');
+        }
+
+        function saveResult() {
+            showSuccess('امکان ذخیره‌سازی در نسخه کامل فعال می‌شود');
+        }
+
+        function closeResult() {
+            elements.resultScreen.style.display = 'none';
+        }
+
+        function saveSettings() {
+            AppState.settings.requiredAccuracy = parseInt(document.getElementById('settingAccuracy').value);
+            AppState.settings.coordinateFormat = document.getElementById('settingCoordinateFormat').value;
+            AppState.settings.autoSave = document.getElementById('settingAutoSave').checked;
+            
+            localStorage.setItem('gpsSurveySettings', JSON.stringify(AppState.settings));
+            showSuccess('تنظیمات ذخیره شد');
+        }
+
+        function loadSettings() {
+            const saved = localStorage.getItem('gpsSurveySettings');
+            if (saved) {
+                AppState.settings = JSON.parse(saved);
+                document.getElementById('settingAccuracy').value = AppState.settings.requiredAccuracy;
+                document.getElementById('settingCoordinateFormat').value = AppState.settings.coordinateFormat;
+                document.getElementById('settingAutoSave').checked = AppState.settings.autoSave;
+            }
+        }
+
+        function resetSettings() {
+            if (confirm('آیا از بازنشانی تنظیمات اطمینان دارید؟')) {
+                localStorage.removeItem('gpsSurveySettings');
+                AppState.settings = {
+                    requiredAccuracy: 5,
+                    coordinateFormat: 'decimal',
+                    autoSave: true
+                };
+                loadSettings();
+                showSuccess('تنظیمات بازنشانی شد');
+            }
+        }
+
+        // راه‌اندازی برنامه
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
 </body>
 </html>

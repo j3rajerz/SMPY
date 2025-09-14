@@ -718,6 +718,14 @@ function initUI() {
   const btnClearNav = document.getElementById('clear-nav');
   if (btnClearNav) btnClearNav.onclick = () => { setNavTarget(null); toast('ناوبری لغو شد', 'success'); };
 
+  // Info panel collapse persist
+  const info = document.getElementById('info-panel');
+  const tInfo = document.getElementById('toggle-info');
+  const INFO_KEY = 'fieldgps.ui.info.collapsed';
+  const collapsed = localStorage.getItem(INFO_KEY) === '1';
+  if (collapsed) info.classList.add('hidden');
+  if (tInfo) tInfo.onclick = () => { info.classList.toggle('hidden'); localStorage.setItem(INFO_KEY, info.classList.contains('hidden') ? '1' : '0'); };
+
   // Go to UTM modal
   const btnGoto = document.getElementById('btn-goto-utm');
   const dlgGoto = document.getElementById('dlg-goto');

@@ -27,10 +27,11 @@
   </head>
   <body>
     <header class="app-header">
-      <div class="brand">FIELD GPS</div>
+      <div class="brand">جی‌پی‌اس میدانی</div>
       <div class="header-status">
+        <button id="btn-compass-perm" class="btn" style="padding:4px 8px;margin-inline-end:8px">اجازه قطب‌نما</button>
         <span id="gps-status" class="badge offline">GPS</span>
-        <span id="online-status" class="badge online">ONLINE</span>
+        <span id="online-status" class="badge online">آنلاین</span>
       </div>
     </header>
 
@@ -49,13 +50,13 @@
             <div id="utm" class="mono">—</div>
           </div>
           <div class="readout small">
-            <label>Lat/Lon</label>
+            <label>عرض/طول</label>
             <div id="latlon" class="mono">—</div>
           </div>
           <div class="kpis">
-            <div><span>Alt</span><strong id="alt">—</strong><span>m</span></div>
-            <div><span>Speed</span><strong id="speed">—</strong><span>km/h</span></div>
-            <div><span>Acc</span><strong id="acc">—</strong><span>m</span></div>
+            <div><span>ارتفاع</span><strong id="alt">—</strong><span>m</span></div>
+            <div><span>سرعت</span><strong id="speed">—</strong><span>km/h</span></div>
+            <div><span>دقت</span><strong id="acc">—</strong><span>m</span></div>
           </div>
         </div>
       </section>
@@ -66,39 +67,41 @@
       </section>
 
       <nav class="action-bar">
-        <button id="btn-mark" class="btn primary">Mark Point</button>
-        <button id="btn-draw" class="btn">Draw on Map</button>
-        <button id="btn-waypoints" class="btn">Waypoints</button>
-        <button id="btn-print" class="btn accent">A4 / Download</button>
+        <button id="btn-mark" class="btn primary">ثبت نقطه</button>
+        <button id="btn-draw" class="btn">ترسیم روی نقشه</button>
+        <button id="btn-waypoints" class="btn">نقاط</button>
+        <button id="btn-print" class="btn accent">A4 / دانلود</button>
       </nav>
     </main>
 
     <!-- Waypoints Modal -->
     <dialog id="dlg-waypoints" class="modal">
       <header>
-        <h3>Waypoints</h3>
+        <h3>نقاط ثبت‌شده</h3>
         <button class="icon" id="close-waypoints">✕</button>
       </header>
       <div class="modal-body">
         <ul id="waypoint-list" class="waypoint-list"></ul>
       </div>
       <footer>
-        <button id="export-gpx" class="btn">Export GPX</button>
-        <button id="export-kml" class="btn">Export KML</button>
+        <button id="export-gpx" class="btn">خروجی GPX</button>
+        <button id="export-kml" class="btn">خروجی KML</button>
+        <button id="export-dxf" class="btn">خروجی DXF</button>
+        <button id="share-files" class="btn">اشتراک</button>
       </footer>
     </dialog>
 
     <!-- A4 Preview Modal -->
     <dialog id="dlg-a4" class="modal large">
       <header>
-        <h3>A4 Preview</h3>
+        <h3>پیش‌نمایش A4</h3>
         <button class="icon" id="close-a4">✕</button>
       </header>
       <div class="modal-body a4-body">
         <canvas id="a4-canvas" width="1240" height="1754"></canvas>
       </div>
       <footer>
-        <button id="download-image" class="btn primary">Download PNG</button>
+        <button id="download-image" class="btn primary">دانلود PNG</button>
       </footer>
     </dialog>
 

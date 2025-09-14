@@ -3,11 +3,12 @@
 // Map style: dark military (MapLibre-compatible raster tiles from Carto/OSM alternatives)
 // We will use Esri Satellite + OSM dark as examples with proper attribution.
 
-let map, draw, drawnItems, trailLine;
+let map, draw, drawnItems, trailLine, accuracyCircle;
 let watchId = null;
 let lastPosition = null;
 let trackCoords = [];
 let waypoints = [];
+const WAYPOINTS_KEY = 'fieldgps.waypoints.v1';
 
 // UTM helpers using proj4
 function getUtmZone(longitude) {
@@ -165,6 +166,14 @@ function onPosition(pos) {
   trackCoords.push([latitude, longitude]);
   trailLine.addLatLng([latitude, longitude]);
 
+  // Accuracy circle
+  if (!accuracyCircle) {
+    accuracyCircle = L.circle([latitude, longitude], { radius: accuracy || 0, color: '#a6ff00', weight: 1, fillColor: '#a6ff00', fillOpacity: 0.1 }).addTo(map);
+  } else {
+    accuracyCircle.setLatLng([latitude, longitude]);
+    if (accuracy != null) accuracyCircle.setRadius(accuracy);
+  }
+
   // Center map on first fix
   if (trackCoords.length === 1) {
     map.setView([latitude, longitude], 17);
@@ -226,9 +235,11 @@ function addWaypointFromCurrent() {
     timestamp: new Date().toISOString(),
   };
   waypoints.push(wp);
+  saveWaypoints();
   // Use vector-friendly circle marker so leaflet-image captures it
   L.circleMarker([wp.lat, wp.lon], { radius: 5, color: '#ff3b30', weight: 2, fillColor: '#ff3b30', fillOpacity: 0.6 }).addTo(map);
   renderWaypointList();
+  hapticBeep();
 }
 
 function redCrossIcon() {
@@ -258,9 +269,30 @@ function renderWaypointList() {
     btn.textContent = 'Zoom';
     btn.onclick = () => map.setView([w.lat, w.lon], 18);
     right.appendChild(btn);
+    const del = document.createElement('button');
+    del.className = 'btn';
+    del.textContent = 'حذف';
+    del.onclick = () => { waypoints = waypoints.filter(x => x.id !== w.id); saveWaypoints(); renderWaypointList(); };
+    right.appendChild(del);
     li.appendChild(left); li.appendChild(right);
     ul.appendChild(li);
   });
+}
+
+function saveWaypoints() {
+  try { localStorage.setItem(WAYPOINTS_KEY, JSON.stringify(waypoints)); } catch {}
+}
+
+function loadWaypoints() {
+  try {
+    const s = localStorage.getItem(WAYPOINTS_KEY);
+    if (!s) return;
+    waypoints = JSON.parse(s) || [];
+    for (const w of waypoints) {
+      L.circleMarker([w.lat, w.lon], { radius: 5, color: '#ff3b30', weight: 2, fillColor: '#ff3b30', fillOpacity: 0.6 }).addTo(map);
+    }
+    renderWaypointList();
+  } catch {}
 }
 
 function exportGPX() {
@@ -278,6 +310,42 @@ function exportKML() {
   const line = trackCoords.length ? `<Placemark><name>track</name><LineString><coordinates>${trackCoords.map(([lat, lon]) => `${lon},${lat},0`).join(' ')}</coordinates></LineString></Placemark>` : '';
   const xml = `${header}${pts}${line}</Document></kml>`;
   downloadText('track.kml', xml, 'application/vnd.google-earth.kml+xml');
+}
+
+function exportDXF() {
+  // Minimal DXF R12 with POINTs for waypoints and a LWPOLYLINE for track
+  const header = [
+    '0','SECTION','2','HEADER','0','ENDSEC',
+    '0','SECTION','2','TABLES','0','ENDSEC',
+    '0','SECTION','2','ENTITIES'
+  ];
+  const ents = [];
+  // Waypoints as POINT on layer WAYPOINTS
+  for (const w of waypoints) {
+    ents.push('0','POINT','8','WAYPOINTS','10',String(w.lon),'20',String(w.lat),'30',String(w.altitudeM ?? 0));
+  }
+  // Track as LWPOLYLINE on layer TRACK (lon/lat space)
+  if (trackCoords.length > 1) {
+    ents.push('0','LWPOLYLINE','8','TRACK','90',String(trackCoords.length),'70','0');
+    for (const [lat, lon] of trackCoords) {
+      ents.push('10',String(lon),'20',String(lat));
+    }
+  }
+  const footer = ['0','ENDSEC','0','EOF'];
+  const dxf = [...header, ...ents, ...footer].join('\n');
+  downloadText('data.dxf', dxf, 'image/vnd.dxf');
+}
+
+async function shareFilesIfSupported() {
+  if (!('canShare' in navigator) || !('share' in navigator)) return;
+  // Prepare a small GPX Blob as example
+  const header = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="FieldGPS" xmlns="http://www.topografix.com/GPX/1/1">`;
+  const pts = waypoints.map(w => `<wpt lat=\"${w.lat}\" lon=\"${w.lon}\"><time>${w.timestamp}</time><name>${w.id}</name></wpt>`).join('');
+  const xml = `${header}${pts}</gpx>`;
+  const file = new File([xml], 'points.gpx', { type: 'application/gpx+xml' });
+  if (navigator.canShare({ files: [file] })) {
+    await navigator.share({ files: [file], title: 'Field GPS', text: 'Waypoints' });
+  }
 }
 
 function downloadText(filename, text, mime) {
@@ -383,6 +451,20 @@ function downloadA4Png() {
 }
 
 function initUI() {
+  // Motion/compass permission (Android Chrome requires user gesture)
+  const btnCompass = document.getElementById('btn-compass-perm');
+  if (btnCompass) {
+    btnCompass.onclick = async () => {
+      try {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          const res = await DeviceOrientationEvent.requestPermission();
+          if (res !== 'granted') return;
+        }
+        window.addEventListener('deviceorientationabsolute', onOrientation, true);
+        window.addEventListener('deviceorientation', onOrientation, true);
+      } catch (e) { console.warn(e); }
+    };
+  }
   document.getElementById('btn-mark').onclick = addWaypointFromCurrent;
   document.getElementById('btn-draw').onclick = () => {
     // Toggle draw polyline as default
@@ -396,6 +478,8 @@ function initUI() {
 
   document.getElementById('export-gpx').onclick = exportGPX;
   document.getElementById('export-kml').onclick = exportKML;
+  const btnDXF = document.getElementById('export-dxf'); if (btnDXF) btnDXF.onclick = exportDXF;
+  const btnShare = document.getElementById('share-files'); if (btnShare) btnShare.onclick = shareFilesIfSupported;
 
   window.addEventListener('online', setOnlineStatus);
   window.addEventListener('offline', setOnlineStatus);
@@ -405,6 +489,31 @@ function initUI() {
 window.addEventListener('load', () => {
   initMap();
   initUI();
+  loadWaypoints();
   requestHighAccuracyPosition();
 });
+
+// Device orientation to update compass heading when GPS heading is absent
+function onOrientation(ev) {
+  let deg = null;
+  if (ev.absolute && typeof ev.alpha === 'number') deg = 360 - ev.alpha; // alpha: 0 = north
+  else if (typeof ev.webkitCompassHeading === 'number') deg = ev.webkitCompassHeading; // iOS
+  if (deg != null && !Number.isNaN(deg)) setHeading((deg + 360) % 360);
+}
+
+// Haptics and beep
+function hapticBeep() {
+  try { if (navigator.vibrate) navigator.vibrate(50); } catch {}
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 1000;
+    osc.connect(gain); gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    osc.start();
+    setTimeout(() => { osc.stop(); ctx.close(); }, 120);
+  } catch {}
+}
 

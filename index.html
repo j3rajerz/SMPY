@@ -39,6 +39,7 @@
         <button id="toggle-track" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت مسیر</button>
         <button id="toggle-follow" class="btn" style="padding:4px 8px;margin-inline-end:8px">دنبال نقشه</button>
         <button id="clear-nav" class="btn" style="padding:4px 8px;margin-inline-end:8px">لغو ناوبری</button>
+        <button id="btn-goto-utm" class="btn" style="padding:4px 8px;margin-inline-end:8px">برو به UTM</button>
         <button id="btn-settings" class="btn" style="padding:4px 8px;margin-inline-end:8px">تنظیمات</button>
         <button id="btn-compass-perm" class="btn" style="padding:4px 8px;margin-inline-end:8px">اجازه قطب‌نما</button>
         <label class="btn" style="padding:4px 8px;margin-inline-end:8px">
@@ -105,9 +106,39 @@
         <button id="export-gpx" class="btn">خروجی GPX</button>
         <button id="export-kml" class="btn">خروجی KML</button>
         <button id="export-dxf" class="btn">خروجی DXF</button>
+        <button id="export-dxf-drawings" class="btn">DXF ترسیمات</button>
         <button id="share-files" class="btn">اشتراک</button>
         <button id="import-data" class="btn">ورود GPX/KML</button>
         <input id="import-file" type="file" accept=".gpx,.kml,application/gpx+xml,application/vnd.google-earth.kml+xml" style="display:none" />
+      </footer>
+    </dialog>
+
+    <!-- Go To UTM Modal -->
+    <dialog id="dlg-goto" class="modal">
+      <header>
+        <h3>برو به مختصات UTM</h3>
+        <button class="icon" id="close-goto">✕</button>
+      </header>
+      <div class="modal-body">
+        <div class="setting">
+          <label>زون</label>
+          <input id="utm-zone" type="number" min="1" max="60" placeholder="مثال: 38" />
+        </div>
+        <div class="setting">
+          <label>باند (حرف)</label>
+          <input id="utm-band" type="text" maxlength="1" placeholder="مثال: S" />
+        </div>
+        <div class="setting">
+          <label>X (Easting)</label>
+          <input id="utm-easting" type="number" step="1" placeholder="مثال: 448593" />
+        </div>
+        <div class="setting">
+          <label>Y (Northing)</label>
+          <input id="utm-northing" type="number" step="1" placeholder="مثال: 3945732" />
+        </div>
+      </div>
+      <footer>
+        <button id="goto-submit" class="btn primary">حرکت</button>
       </footer>
     </dialog>
 

@@ -20,7 +20,7 @@ let altHistory = [];   // last N altitudes (m)
 const HIST_LIMIT = 60;
 let followMode = false;
 let trackingEnabled = true;
-let navTarget = null; // waypoint id
+let navTarget = null; // {lat, lon, label} or null
 let navLine = null;
 
 // UTM helpers using proj4
@@ -365,6 +365,33 @@ function exportDXF() {
   downloadText('data.dxf', dxf, 'image/vnd.dxf');
 }
 
+function exportDXFDrawings() {
+  // Gather polylines/polygons from drawnItems and export as DXF (lat/lon space)
+  const header = [
+    '0','SECTION','2','HEADER','0','ENDSEC',
+    '0','SECTION','2','TABLES','0','ENDSEC',
+    '0','SECTION','2','ENTITIES'
+  ];
+  const ents = [];
+  drawnItems.eachLayer((layer) => {
+    if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+      const pts = layer.getLatLngs();
+      ents.push('0','LWPOLYLINE','8','DRAWINGS','90',String(pts.length),'70','0');
+      for (const ll of pts) { ents.push('10',String(ll.lng),'20',String(ll.lat)); }
+    }
+    if (layer instanceof L.Polygon) {
+      const rings = layer.getLatLngs();
+      const flat = Array.isArray(rings[0]) ? rings[0] : rings;
+      ents.push('0','LWPOLYLINE','8','DRAWINGS','90',String(flat.length + 1),'70','1');
+      for (const ll of flat) { ents.push('10',String(ll.lng),'20',String(ll.lat)); }
+      const first = flat[0]; ents.push('10',String(first.lng),'20',String(first.lat));
+    }
+  });
+  const footer = ['0','ENDSEC','0','EOF'];
+  const dxf = [...header, ...ents, ...footer].join('\n');
+  downloadText('drawings.dxf', dxf, 'image/vnd.dxf');
+}
+
 async function shareFilesIfSupported() {
   if (!('canShare' in navigator) || !('share' in navigator)) return;
   // Prepare a small GPX Blob as example
@@ -434,23 +461,51 @@ function addWaypointRaw(lat, lon, alt) {
   waypoints.push(wp); saveWaypoints(); L.circleMarker([lat, lon], { radius: 5, color: '#ff3b30', weight: 2, fillColor: '#ff3b30', fillOpacity: 0.6 }).addTo(map); renderWaypointList();
 }
 
-function setNavTarget(id) {
-  navTarget = id;
+function setNavTarget(target) {
+  // target can be a waypoint id or an object {lat, lon, label}
+  if (typeof target === 'string') {
+    const w = waypoints.find(x => x.id === target);
+    navTarget = w ? { lat: w.lat, lon: w.lon, label: w.id } : null;
+  } else {
+    navTarget = target;
+  }
   if (navLine) { map.removeLayer(navLine); navLine = null; }
 }
 
 function updateNavigationOverlay(lat, lon) {
   const el = document.getElementById('nav-overlay'); if (!el) return;
   if (!navTarget) { el.classList.add('hidden'); if (navLine) { map.removeLayer(navLine); navLine = null; } return; }
-  const target = waypoints.find(w => w.id === navTarget);
-  if (!target) { setNavTarget(null); return; }
+  const target = navTarget;
   const from = turf.point([lon, lat]); const to = turf.point([target.lon, target.lat]);
   const d = turf.distance(from, to, { units: 'meters' });
   const b = (turf.bearing(from, to) + 360) % 360;
-  el.textContent = `نقطه ${target.id}\nفاصله: ${d.toFixed(1)} m\nسمت: ${b.toFixed(0)}°`;
+  const label = target.label || 'هدف';
+  el.textContent = `${label}\nفاصله: ${d.toFixed(1)} m\nسمت: ${b.toFixed(0)}°`;
   el.classList.remove('hidden');
   if (!navLine) navLine = L.polyline([], { color: '#c3ff00', dashArray: '6,6' }).addTo(map);
   navLine.setLatLngs([[lat, lon], [target.lat, target.lon]]);
+}
+
+function onGotoUtmSubmit() {
+  const zone = parseInt(document.getElementById('utm-zone').value);
+  const band = (document.getElementById('utm-band').value || '').toUpperCase();
+  const easting = parseFloat(document.getElementById('utm-easting').value);
+  const northing = parseFloat(document.getElementById('utm-northing').value);
+  if (!Number.isFinite(zone) || !Number.isFinite(easting) || !Number.isFinite(northing)) { toast('ورودی نامعتبر', 'error'); return; }
+  // Build UTM projection string
+  const isNorthern = band ? (band >= 'N') : true; // heuristic
+  const utmProj = `+proj=utm +zone=${zone} ${isNorthern ? '+north' : '+south'} +datum=WGS84 +units=m +no_defs`;
+  const inv = proj4(utmProj, 'EPSG:4326');
+  const [lon, lat] = inv.inverse ? inv.inverse([easting, northing]) : inv.backward([easting, northing]);
+  // Create a temp waypoint and navigate
+  const temp = { lat, lon, label: `UTM ${zone}${band} ${easting} ${northing}` };
+  setNavTarget(temp);
+  // Not storing as permanent waypoint; draw a marker for context
+  const marker = L.circleMarker([lat, lon], { radius: 6, color: '#c3ff00', weight: 2, fillColor: '#c3ff00', fillOpacity: 0.3 }).addTo(map);
+  // Update overlay using current location in onPosition; also force immediate view to target
+  map.setView([lat, lon], 17);
+  const el = document.getElementById('nav-overlay'); if (el) { el.classList.remove('hidden'); el.textContent = `هدف UTM\n${zone}${band} ${easting} ${northing}`; }
+  document.getElementById('dlg-goto').close();
 }
 
 function openWaypointsDialog() {
@@ -576,6 +631,7 @@ function initUI() {
   document.getElementById('export-gpx').onclick = exportGPX;
   document.getElementById('export-kml').onclick = exportKML;
   const btnDXF = document.getElementById('export-dxf'); if (btnDXF) btnDXF.onclick = exportDXF;
+  const btnDXFDraw = document.getElementById('export-dxf-drawings'); if (btnDXFDraw) btnDXFDraw.onclick = exportDXFDrawings;
   const btnShare = document.getElementById('share-files'); if (btnShare) btnShare.onclick = shareFilesIfSupported;
   const btnImport = document.getElementById('import-data'); const inputImport = document.getElementById('import-file');
   if (btnImport && inputImport) { btnImport.onclick = () => inputImport.click(); inputImport.onchange = onImportFile; }
@@ -621,6 +677,15 @@ function initUI() {
   // Clear navigation
   const btnClearNav = document.getElementById('clear-nav');
   if (btnClearNav) btnClearNav.onclick = () => { setNavTarget(null); toast('ناوبری لغو شد', 'success'); };
+
+  // Go to UTM modal
+  const btnGoto = document.getElementById('btn-goto-utm');
+  const dlgGoto = document.getElementById('dlg-goto');
+  const closeGoto = document.getElementById('close-goto');
+  const gotoSubmit = document.getElementById('goto-submit');
+  if (btnGoto) btnGoto.onclick = () => dlgGoto.showModal();
+  if (closeGoto) closeGoto.onclick = () => dlgGoto.close();
+  if (gotoSubmit) gotoSubmit.onclick = onGotoUtmSubmit;
 
   // Ripple effect delegation for all .btn
   document.body.addEventListener('click', (e) => {

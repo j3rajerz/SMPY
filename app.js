@@ -13,6 +13,11 @@ let useOffline = false;
 let offlineLayer = null;
 let SQL = null;
 let mbtilesDb = null;
+const SETTINGS_KEY = 'fieldgps.settings.v1';
+let settings = { maxAccM: 20, alertRadiusM: 30 };
+let speedHistory = []; // last N speeds (km/h)
+let altHistory = [];   // last N altitudes (m)
+const HIST_LIMIT = 60;
 
 // UTM helpers using proj4
 function getUtmZone(longitude) {
@@ -184,6 +189,16 @@ function onPosition(pos) {
   }
 
   setGpsStatus(true);
+
+  // Append history and render sparkline
+  if (speedKmh != null) { speedHistory.push(speedKmh); if (speedHistory.length > HIST_LIMIT) speedHistory.shift(); }
+  if (altitude != null) { altHistory.push(altitude); if (altHistory.length > HIST_LIMIT) altHistory.shift(); }
+  renderSparkline();
+
+  // Accuracy filter: ignore points worse than threshold for alerts
+  if (accuracy != null && accuracy > settings.maxAccM) return;
+  // Proximity alert
+  checkProximityAlerts(latitude, longitude);
 }
 
 function onPositionError(err) {
@@ -532,6 +547,57 @@ function initUI() {
     target.appendChild(span);
     setTimeout(() => span.remove(), 650);
   }, true);
+  // Settings modal
+  const settingsBtn = document.getElementById('btn-settings');
+  const dlgSettings = document.getElementById('dlg-settings');
+  const closeSettings = document.getElementById('close-settings');
+  const inputAcc = document.getElementById('set-max-acc');
+  const valAcc = document.getElementById('set-max-acc-val');
+  const inputRad = document.getElementById('set-alert-radius');
+  const valRad = document.getElementById('set-alert-radius-val');
+  const saveSettings = document.getElementById('save-settings');
+  loadSettings();
+  updateSettingsUI();
+  if (settingsBtn) settingsBtn.onclick = () => dlgSettings.showModal();
+  if (closeSettings) closeSettings.onclick = () => dlgSettings.close();
+  function updateSettingsUI() {
+    inputAcc.value = settings.maxAccM; valAcc.textContent = settings.maxAccM + ' m';
+    inputRad.value = settings.alertRadiusM; valRad.textContent = settings.alertRadiusM + ' m';
+  }
+  function readSettingsUI() {
+    settings.maxAccM = parseInt(inputAcc.value);
+    settings.alertRadiusM = parseInt(inputRad.value);
+  }
+  inputAcc.oninput = () => { valAcc.textContent = inputAcc.value + ' m'; };
+  inputRad.oninput = () => { valRad.textContent = inputRad.value + ' m'; };
+  saveSettings.onclick = () => { readSettingsUI(); saveSettingsLocal(); dlgSettings.close(); toast('ذخیره شد', 'success'); };
+
+  // Quick measure via long press
+  let pressTimer = null, pressStartLatLng = null, measureLine = null;
+  map.on('mousedown touchstart', (e) => {
+    pressStartLatLng = e.latlng;
+    pressTimer = setTimeout(() => {
+      if (!pressStartLatLng) return;
+      if (measureLine) map.removeLayer(measureLine);
+      measureLine = L.polyline([pressStartLatLng], { color: '#a6ff00', dashArray: '4,6' }).addTo(map);
+      toast('اندازه‌گیری سریع: نقطه دوم را لمس کنید', 'warn');
+      const move = (ev) => { if (measureLine) measureLine.setLatLngs([pressStartLatLng, ev.latlng]); };
+      const end = (ev) => {
+        map.off('mousemove', move); map.off('touchmove', move); map.off('mouseup', end); map.off('touchend', end);
+        if (measureLine) {
+          const pts = measureLine.getLatLngs();
+          if (pts.length >= 2) {
+            const line = turf.lineString(pts.map(ll => [ll.lng, ll.lat]));
+            const m = turf.length(line, { units: 'kilometers' }) * 1000;
+            toast(`طول: ${m.toFixed(1)} m`, 'success');
+          }
+          setTimeout(() => { map.removeLayer(measureLine); measureLine = null; }, 800);
+        }
+      };
+      map.on('mousemove', move); map.on('touchmove', move); map.on('mouseup', end); map.on('touchend', end);
+    }, 550);
+  });
+  map.on('mouseup touchend', () => { clearTimeout(pressTimer); pressTimer = null; pressStartLatLng = null; });
 }
 
 window.addEventListener('load', () => {
@@ -591,6 +657,66 @@ function getTilePng(db, z, x, y) {
   }
   stmt.free();
   return data;
+}
+
+function loadSettings() {
+  try { const s = localStorage.getItem(SETTINGS_KEY); if (s) settings = JSON.parse(s); } catch {}
+}
+function saveSettingsLocal() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {}
+}
+
+function renderSparkline() {
+  const c = document.getElementById('sparkline'); if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  // Draw speed (green) and altitude (yellow-green)
+  drawSeries(ctx, speedHistory, '#00d46a');
+  drawSeries(ctx, normalizeSeries(altHistory), '#c3ff00');
+}
+
+function drawSeries(ctx, series, color) {
+  if (!series.length) return;
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  const max = Math.max(...series);
+  const min = Math.min(...series);
+  const dx = series.length > 1 ? (w / (series.length - 1)) : w;
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+  series.forEach((v, i) => {
+    const x = i * dx;
+    const t = max === min ? 0.5 : (v - min) / (max - min);
+    const y = h - t * (h - 6) - 3;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function normalizeSeries(series) {
+  if (!series.length) return series;
+  const max = Math.max(...series), min = Math.min(...series);
+  if (max === min) return series.map(() => 0.5);
+  return series.map(v => (v - min) / (max - min));
+}
+
+function checkProximityAlerts(lat, lon) {
+  if (!waypoints.length) return;
+  let nearest = null; let nearestD = Infinity;
+  for (const w of waypoints) {
+    const d = turf.distance([lon, lat], [w.lon, w.lat], { units: 'meters' });
+    if (d < nearestD) { nearest = w; nearestD = d; }
+  }
+  if (nearest && nearestD <= settings.alertRadiusM) {
+    toast(`نزدیک نقطه ${nearest.id} — ${nearestD.toFixed(1)} m`, 'warn');
+  }
+}
+
+function toast(message, type = 'success') {
+  const box = document.getElementById('toasts'); if (!box) return;
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = message;
+  box.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(10px)'; setTimeout(() => el.remove(), 250); }, 2200);
 }
 
 // Generate PNG icons and swap manifest + apple-touch-icon at runtime

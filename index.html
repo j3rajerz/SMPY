@@ -36,6 +36,7 @@
     <header class="app-header">
       <div class="brand">جی‌پی‌اس میدانی</div>
       <div class="header-status">
+        <button id="btn-settings" class="btn" style="padding:4px 8px;margin-inline-end:8px">تنظیمات</button>
         <button id="btn-compass-perm" class="btn" style="padding:4px 8px;margin-inline-end:8px">اجازه قطب‌نما</button>
         <label class="btn" style="padding:4px 8px;margin-inline-end:8px">
           آفلاین نقشه
@@ -70,6 +71,7 @@
             <div><span>سرعت</span><strong id="speed">—</strong><span>km/h</span></div>
             <div><span>دقت</span><strong id="acc">—</strong><span>m</span></div>
           </div>
+          <canvas id="sparkline" width="320" height="50" title="Speed/Altitude"></canvas>
         </div>
       </section>
 
@@ -118,6 +120,32 @@
     </dialog>
 
     <script src="./app.js"></script>
+
+    <!-- Settings Modal -->
+    <dialog id="dlg-settings" class="modal">
+      <header>
+        <h3>تنظیمات</h3>
+        <button class="icon" id="close-settings">✕</button>
+      </header>
+      <div class="modal-body">
+        <div class="setting">
+          <label>حداکثر خطای قابل قبول (متر)</label>
+          <input id="set-max-acc" type="range" min="3" max="100" step="1" />
+          <div class="mono" id="set-max-acc-val">— m</div>
+        </div>
+        <div class="setting">
+          <label>شعاع هشدار نزدیکی به نقطه (متر)</label>
+          <input id="set-alert-radius" type="range" min="5" max="200" step="5" />
+          <div class="mono" id="set-alert-radius-val">— m</div>
+        </div>
+      </div>
+      <footer>
+        <button id="save-settings" class="btn primary">ذخیره</button>
+      </footer>
+    </dialog>
+
+    <!-- Toasts -->
+    <div id="toasts" class="toasts"></div>
   </body>
   </html>
 

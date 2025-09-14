@@ -41,6 +41,8 @@ body { display: flex; flex-direction: column; }
 .kpis { display: flex; gap: 12px; align-items: baseline; color: #b8ff74; }
 .kpis strong { color: var(--text-phosphor); margin: 0 4px; }
 
+#sparkline { width: 100%; max-width: 480px; height: 50px; border: 2px solid var(--green-olive); border-radius: 6px; background: #0a110d; box-shadow: inset 0 0 12px rgba(0,0,0,0.4); }
+
 .map-wrap { position: relative; }
 #map { width: 100%; height: 100%; border-top: 2px solid var(--green-olive); border-bottom: 2px solid var(--green-olive); }
 .measure-overlay { position: absolute; bottom: 8px; left: 8px; background: rgba(10,17,13,0.8); padding: 6px 8px; border: 2px solid var(--green-olive); border-radius: 4px; color: var(--text-alt); font-family: "IBM Plex Mono", monospace; }
@@ -65,6 +67,7 @@ body { display: flex; flex-direction: column; }
 .modal header, .modal footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 2px solid var(--green-olive); }
 .modal footer { border-top: 2px solid var(--green-olive); border-bottom: none; }
 .modal .modal-body { padding: 8px 12px; max-height: 70vh; overflow: auto; }
+.modal .setting { display: grid; gap: 6px; padding: 8px 0; }
 .icon { background: transparent; color: var(--text-alt); border: none; font-size: 18px; }
 .waypoint-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .waypoint-list li { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: #0a110d; border: 2px solid var(--green-olive); border-radius: 6px; }
@@ -78,6 +81,14 @@ body { display: flex; flex-direction: column; }
 
 /* A4 canvas area */
 .a4-body { display: grid; place-items: center; background: #0a110d; }
+
+.toasts { position: fixed; right: 12px; bottom: 12px; display: grid; gap: 8px; z-index: 2000; }
+.toast { background: #0b1510; color: var(--text-phosphor); border: 2px solid var(--green-olive); border-radius: 8px; padding: 8px 12px; box-shadow: 0 10px 22px rgba(0,0,0,0.5); opacity: 0; transform: translateY(10px); animation: toast-in .3s ease forwards; }
+.toast.success { border-color: var(--accent-green); }
+.toast.warn { border-color: #d9b600; }
+.toast.error { border-color: var(--accent-red); }
+
+@keyframes toast-in { to { opacity: 1; transform: translateY(0); } }
 
 @media print {
   body { background: white; color: black; }

@@ -175,6 +175,24 @@
       </header>
       <div class="modal-body a4-body">
         <canvas id="a4-canvas" width="1240" height="1754"></canvas>
+        <div style="display:grid;gap:8px;width:100%;max-width:900px;padding:8px">
+          <div class="setting">
+            <label>عنوان</label>
+            <input id="a4-title" type="text" placeholder="مثال: برداشت پلی‌گون پروژه X" />
+          </div>
+          <div class="setting">
+            <label>پروژه</label>
+            <input id="a4-project" type="text" placeholder="اختیاری" />
+          </div>
+          <div class="setting">
+            <label>برداشت‌کننده</label>
+            <input id="a4-surveyor" type="text" placeholder="اختیاری" />
+          </div>
+          <div class="setting">
+            <label>توضیحات</label>
+            <textarea id="a4-notes" rows="3" placeholder="اطلاعات/توضیحات تکمیلی" style="resize:vertical"></textarea>
+          </div>
+        </div>
       </div>
       <footer>
         <label class="btn" style="padding:4px 8px">
@@ -186,6 +204,7 @@
         </label>
         <button id="download-image" class="btn primary">دانلود PNG</button>
         <button id="download-pdf" class="btn">دانلود PDF</button>
+        <button id="download-jpg" class="btn">دانلود JPG</button>
       </footer>
     </dialog>
 

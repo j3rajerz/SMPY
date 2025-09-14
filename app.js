@@ -708,6 +708,13 @@ function downloadA4Png() {
   a.href = url; a.download = 'map-a4.png'; a.click();
 }
 
+function downloadA4Jpg() {
+  const canvas = document.getElementById('a4-canvas');
+  const url = canvas.toDataURL('image/jpeg', 0.92);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'map-a4.jpg'; a.click();
+}
+
 function downloadA4Pdf() {
   const canvas = document.getElementById('a4-canvas');
   const { jsPDF } = window.jspdf || {};

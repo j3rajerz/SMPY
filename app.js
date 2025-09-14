@@ -517,6 +517,21 @@ function initUI() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch(console.warn);
   }
+
+  // Ripple effect delegation for all .btn
+  document.body.addEventListener('click', (e) => {
+    const target = e.target.closest('.btn');
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const span = document.createElement('span');
+    span.className = 'ripple';
+    span.style.left = x + 'px';
+    span.style.top = y + 'px';
+    target.appendChild(span);
+    setTimeout(() => span.remove(), 650);
+  }, true);
 }
 
 window.addEventListener('load', () => {

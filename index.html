@@ -1499,8 +1499,8 @@
                 handlePositionError,
                 {
                     enableHighAccuracy: true,
-                    maximumAge: 30000,
-                    timeout: 27000
+                    maximumAge: 0,
+                    timeout: 10000
                 }
             );
         }
@@ -1542,7 +1542,7 @@
 
         function updateGPSDisplay(coords) {
             elements.satelliteCount.textContent = Math.max(4, Math.min(12, Math.floor(20 - (coords.accuracy / 5))));
-            elements.gpsAccuracy.textContent = Math.round(coords.accuracy) + ' متر';
+            elements.gpsAccuracy.textContent = (coords.accuracy != null ? coords.accuracy.toFixed(1) : '--') + ' متر';
             elements.gpsAltitude.textContent = coords.altitude ? Math.round(coords.altitude) + ' متر' : '-- متر';
         }
 

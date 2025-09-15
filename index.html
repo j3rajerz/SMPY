@@ -207,6 +207,9 @@
             border: 1px solid var(--border-color);
             border-radius: 5px;
         }
+        .gnss-toolbar { display:flex; align-items:center; justify-content:space-between; }
+        .gnss-stats { display:flex; gap:12px; font-family:'Courier New', monospace; }
+        .gnss-badge { padding:2px 6px; border:1px solid var(--border-color); border-radius:3px; }
         
         .panel-title {
             color: var(--highlight-color);
@@ -701,6 +704,16 @@
             <!-- بخش ماهواره‌ها -->
             <div class="content-section" id="sectionSatellite">
                 <div class="satellite-panel">
+                    <div class="gnss-toolbar">
+                        <button class="action-btn" id="btnGnssConnect">🔗 اتصال گیرنده GNSS</button>
+                        <div class="gnss-stats">
+                            <span class="gnss-badge">Fix: <span id="gnssFixType">---</span></span>
+                            <span class="gnss-badge">HDOP: <span id="gnssHdop">--</span></span>
+                            <span class="gnss-badge">Used: <span id="gnssUsed">0</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="satellite-panel">
                     <div class="panel-title">ماهواره‌های GPS</div>
                     <div class="satellite-grid" id="gpsSatellites">
                         <!-- ماهواره‌ها توسط جاوااسکریپت اضافه می‌شوند -->
@@ -993,6 +1006,9 @@
             gpsSatellites: document.getElementById('gpsSatellites'),
             glonassSatellites: document.getElementById('glonassSatellites')
         };
+        elements.gnssFixType = document.getElementById('gnssFixType');
+        elements.gnssHdop = document.getElementById('gnssHdop');
+        elements.gnssUsed = document.getElementById('gnssUsed');
 
         // توابع اصلی
         function initializeApp() {
@@ -1005,6 +1021,94 @@
             
             setInterval(updateTime, 1000);
             setInterval(updateSatelliteDisplay, 2000);
+        }
+
+        // GNSS over Web Serial (NMEA)
+        let gnssPort = null;
+        let gnssReader = null;
+        let gnssReading = false;
+
+        async function connectGNSSViaSerial() {
+            try {
+                if (!('serial' in navigator)) {
+                    showError('مرورگر از Web Serial پشتیبانی نمی‌کند');
+                    return;
+                }
+                gnssPort = await navigator.serial.requestPort();
+                await gnssPort.open({ baudRate: 9600 });
+                const decoder = new TextDecoderStream();
+                gnssPort.readable.pipeTo(decoder.writable);
+                const inputStream = decoder.readable;
+                gnssReader = inputStream.getReader();
+                gnssReading = true;
+                readNMEA();
+                showSuccess('اتصال GNSS برقرار شد');
+            } catch (e) {
+                showError('اتصال به GNSS ناموفق بود');
+                console.error(e);
+            }
+        }
+
+        async function readNMEA() {
+            let buffer = '';
+            while (gnssReading) {
+                try {
+                    const { value, done } = await gnssReader.read();
+                    if (done) break;
+                    buffer += value;
+                    let idx;
+                    while ((idx = buffer.indexOf('\n')) >= 0) {
+                        const line = buffer.slice(0, idx).trim();
+                        buffer = buffer.slice(idx + 1);
+                        if (line.startsWith('$')) parseNMEALine(line);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    break;
+                }
+            }
+        }
+
+        function parseNMEALine(sentence) {
+            const parts = sentence.split(',');
+            const type = parts[0].substring(3, 6);
+            switch (type) {
+                case 'GGA': handleGGA(parts); break;
+                case 'GSA': handleGSA(parts); break;
+                case 'GSV': handleGSV(parts); break;
+                default: break;
+            }
+        }
+
+        function handleGGA(p) {
+            // Fix quality: 0=invalid,1=GPS,2=DGPS,4=RTK Fixed,5=RTK Float
+            const fixQ = parseInt(p[6] || '0', 10);
+            const hdop = parseFloat(p[8] || '0');
+            elements.gnssHdop.textContent = isFinite(hdop) ? hdop.toFixed(1) : '--';
+            elements.gnssFixType.textContent = (
+                fixQ === 4 ? 'RTK Fixed' : fixQ === 5 ? 'RTK Float' : fixQ === 2 ? 'DGPS' : fixQ === 1 ? 'GPS' : 'No Fix'
+            );
+        }
+
+        function handleGSA(p) {
+            // Satellites used count (IDs from p[3]..p[14])
+            const used = p.slice(3, 15).filter(x => x && x !== '').length;
+            elements.gnssUsed.textContent = used;
+        }
+
+        function handleGSV(p) {
+            // Per-satellite SNR appears in groups of 4 values starting at index 4
+            const sats = [];
+            for (let i = 4; i < p.length - 4; i += 4) {
+                const id = parseInt(p[i], 10);
+                const snr = parseInt(p[i + 3], 10);
+                if (!isNaN(id)) sats.push({ id, snr: isNaN(snr) ? 0 : snr, active: true });
+            }
+            if (sats.length) {
+                AppState.satellites.gps = sats; // simple overwrite for display
+                updateSatelliteDisplay();
+                elements.satelliteCount.textContent = String(sats.length);
+            }
         }
 
         function setupEventListeners() {
@@ -1038,6 +1142,8 @@
             // تنظیمات
             document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
             document.getElementById('btnReset').addEventListener('click', resetSettings);
+            // GNSS connect
+            document.getElementById('btnGnssConnect').addEventListener('click', connectGNSSViaSerial);
         }
 
         function initializeMaps() {

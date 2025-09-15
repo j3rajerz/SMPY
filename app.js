@@ -33,6 +33,7 @@ let loggingCsv = { active: false, rows: [] };
 let nmea = { connected: false, sats: [], device: null, reader: null };
 let fieldPolygon = null; // Polygon built from waypoints
 let formInfo = { fullname: '', father: '', nid: '', region: '', parcelMain: '', parcelSub: '' };
+let lastManualPolyline = null; // track last drawn polyline for manual finalize
 
 // UTM helpers using proj4
 function getUtmZone(longitude) {
@@ -131,6 +132,9 @@ function initMap() {
   map.on(L.Draw.Event.CREATED, (e) => {
     const layer = e.layer;
     drawnItems.addLayer(layer);
+    if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+      lastManualPolyline = layer;
+    }
     updateMeasurementOverlay(layer);
   });
 
@@ -146,6 +150,54 @@ function initMap() {
 
   // Trail polyline with glow effect (duplicated polyline technique)
   trailLine = L.polyline([], { color: '#39ff14', weight: 3, opacity: 0.9 }).addTo(map);
+}
+
+function updateFinalOverlay() {
+  const el = document.getElementById('final-overlay'); if (!el) return;
+  const { areaM2, perimM } = computeFieldMetrics();
+  if (!areaM2 || !perimM) { el.classList.add('hidden'); return; }
+  const f = formInfo || {};
+  const lines = [
+    `مساحت: ${areaM2.toFixed(2)} m²`,
+    `محیط: ${perimM.toFixed(2)} m`,
+    f.fullname ? `نام: ${f.fullname}` : null,
+    f.parcelMain ? `پلاک: ${f.parcelMain}${f.parcelSub?'-'+f.parcelSub:''}` : null,
+    'برای ویرایش/تکمیل: دکمه "بررسی"'
+  ].filter(Boolean);
+  el.textContent = lines.join('\n');
+  el.classList.remove('hidden');
+}
+
+function finishSurvey() {
+  drawFieldPolygon();
+  updateFinalOverlay();
+}
+
+function finishDrawing() {
+  // Convert last drawn polyline to polygon if possible
+  let polyline = null;
+  // Prefer lastManualPolyline if still present
+  if (lastManualPolyline && drawnItems.hasLayer(lastManualPolyline)) {
+    polyline = lastManualPolyline;
+  } else {
+    // fallback: find any last polyline
+    const layers = Object.values(drawnItems._layers || {});
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const l = layers[i];
+      if (l instanceof L.Polyline && !(l instanceof L.Polygon)) { polyline = l; break; }
+    }
+  }
+  if (!polyline) { toast('پلی‌لاین یافت نشد', 'warn'); return; }
+  const pts = polyline.getLatLngs();
+  const flat = Array.isArray(pts[0]) ? pts[0] : pts;
+  if (!flat || flat.length < 3) { toast('نقاط کافی نیست', 'warn'); return; }
+  const polygon = L.polygon(flat, { color: '#39ff14', weight: 3, fillOpacity: 0.1 });
+  drawnItems.addLayer(polygon);
+  drawnItems.removeLayer(polyline);
+  lastManualPolyline = null;
+  map.fitBounds(polygon.getBounds(), { padding: [20,20] });
+  updateMeasurementOverlay(polygon);
+  updateFinalOverlay();
 }
 
 function setBaseLayer(key) {
@@ -342,6 +394,8 @@ function addWaypointFromCurrent() {
   // Use vector-friendly circle marker so leaflet-image captures it
   L.circleMarker([wp.lat, wp.lon], { radius: 5, color: '#ff3b30', weight: 2, fillColor: '#ff3b30', fillOpacity: 0.6 }).addTo(map);
   renderWaypointList();
+  // Center map on the newly added point
+  try { map.setView([wp.lat, wp.lon], map.getZoom()); } catch {}
   hapticBeep();
 }
 
@@ -731,6 +785,7 @@ function drawFieldPolygon() {
   map.fitBounds(fieldPolygon.getBounds(), { padding: [20,20] });
   const { areaM2, perimM } = computeFieldMetrics();
   toast(`مساحت: ${areaM2?.toFixed(1)} m² | محیط: ${perimM?.toFixed(1)} m`, 'success');
+  updateFinalOverlay();
 }
 async function openA4Preview() {
   await renderA4Structured();
@@ -987,12 +1042,17 @@ function initUI() {
     // Toggle draw polyline as default
     new L.Draw.Polyline(map, draw.options.draw.polyline).enable();
   };
+  const btnFinishDraw = document.getElementById('btn-finish-draw'); if (btnFinishDraw) btnFinishDraw.onclick = finishDrawing;
+  const btnFinishSurvey = document.getElementById('btn-finish-survey'); if (btnFinishSurvey) btnFinishSurvey.onclick = finishSurvey;
   document.getElementById('btn-waypoints').onclick = () => { openWaypointsDialog(); };
   document.getElementById('btn-print').onclick = openA4Preview;
   const btnReview = document.getElementById('btn-review'); if (btnReview) btnReview.onclick = openReview;
   const btnPlot = document.getElementById('btn-plot'); if (btnPlot) btnPlot.onclick = drawFieldPolygon;
   document.getElementById('download-image').onclick = downloadA4Png;
   const btnPdf = document.getElementById('download-pdf'); if (btnPdf) btnPdf.onclick = downloadA4Pdf;
+  const btnKml = document.getElementById('download-kml'); if (btnKml) btnKml.onclick = exportKML;
+  const btnDxfA4 = document.getElementById('download-dxf-a4'); if (btnDxfA4) btnDxfA4.onclick = () => exportDXFDrawings();
+  const btnShareA4 = document.getElementById('share-a4'); if (btnShareA4) btnShareA4.onclick = shareFilesIfSupported;
   document.getElementById('close-waypoints').onclick = closeWaypointsDialog;
   document.getElementById('close-a4').onclick = () => document.getElementById('dlg-a4').close();
 
@@ -1118,7 +1178,8 @@ function initUI() {
   // Mark averaging modal
   const dlgMark = document.getElementById('dlg-mark');
   const closeMark = document.getElementById('close-mark'); if (closeMark) closeMark.onclick = () => dlgMark.close();
-  const btnMark = document.getElementById('btn-mark'); if (btnMark) btnMark.onclick = () => { dlgMark.showModal(); resetAveraging(); };
+  // Keep standard mark button for immediate waypoint add (set earlier). Use precise button for averaging.
+  const btnPrecise = document.getElementById('btn-precise-mark'); if (btnPrecise) btnPrecise.onclick = () => { dlgMark.showModal(); resetAveraging(); };
   const avgStart = document.getElementById('avg-start'); if (avgStart) avgStart.onclick = startAveraging;
   const avgStop = document.getElementById('avg-stop'); if (avgStop) avgStop.onclick = stopAveraging;
   const avgSave = document.getElementById('avg-save'); if (avgSave) avgSave.onclick = saveAveragedPoint;

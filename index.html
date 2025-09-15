@@ -1303,6 +1303,8 @@
         let gpsWatchId = null;
         let planPolygonLayer = null;
         let planLengthMarkers = [];
+        let a4SatPolygon = null;
+        let a4TrfPolygon = null;
 
         // عناصر DOM
         const elements = {
@@ -1774,13 +1776,18 @@
                 document.getElementById('fieldMain').value = AppState.ownerData.mainPlate || '';
             }
 
-            // Draw polygon on all maps
-            [mapPlan, mapSatellite, mapTraffic].forEach(m => {
-                if (!m) return;
-                let polygon = L.polygon(latlngs.map(p => [p.lat, p.lng]), { color: '#000', weight: 2, fillColor: '#dfe8f3', fillOpacity: 0.35 });
-                polygon.addTo(m);
-                m.fitBounds(polygon.getBounds(), { padding: [10,10] });
-            });
+            // Satellite map polygon (single instance)
+            if (mapSatellite) {
+                if (a4SatPolygon) { try { mapSatellite.removeLayer(a4SatPolygon); } catch {} }
+                a4SatPolygon = L.polygon(latlngs.map(p => [p.lat, p.lng]), { color: '#000', weight: 2, fillColor: '#dfe8f3', fillOpacity: 0.35 }).addTo(mapSatellite);
+                mapSatellite.fitBounds(a4SatPolygon.getBounds(), { padding: [10,10] });
+            }
+            // Traffic map polygon (single instance)
+            if (mapTraffic) {
+                if (a4TrfPolygon) { try { mapTraffic.removeLayer(a4TrfPolygon); } catch {} }
+                a4TrfPolygon = L.polygon(latlngs.map(p => [p.lat, p.lng]), { color: '#000', weight: 2, fillColor: '#dfe8f3', fillOpacity: 0.35 }).addTo(mapTraffic);
+                mapTraffic.fitBounds(a4TrfPolygon.getBounds(), { padding: [10,10] });
+            }
 
             // Plan map: black polygon with side length labels
             if (planPolygonLayer) {

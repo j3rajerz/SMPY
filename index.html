@@ -1,5 +1,277 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <title>Field GPS — Military UI</title>
+    <meta name="theme-color" content="#0B1D14" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+
+    <!-- Leaflet Draw -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+
+    <!-- Turf.js for geometry calculations -->
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.1.0/turf.min.js"></script>
+
+    <!-- Proj4 for UTM conversion -->
+    <script src="https://cdn.jsdelivr.net/npm/proj4@2.12.1/dist/proj4.js"></script>
+
+    <!-- Leaflet Image (map snapshot) -->
+    <script src="https://cdn.jsdelivr.net/npm/leaflet-image@0.0.4/leaflet-image.js"></script>
+
+    <!-- sql.js for MBTiles (SQLite in browser) -->
+    <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/sql-wasm.js"></script>
+
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <!-- LZ-String for shareable links -->
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">جی‌پی‌اس میدانی</div>
+      <div class="header-status">
+        <button id="btn-offline-manager" class="btn" style="padding:4px 8px;margin-inline-end:8px">مدیریت آفلاین</button>
+        <button id="btn-log" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت CSV</button>
+        <button id="toggle-track" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت مسیر</button>
+        <button id="toggle-follow" class="btn" style="padding:4px 8px;margin-inline-end:8px">دنبال نقشه</button>
+        <button id="clear-nav" class="btn" style="padding:4px 8px;margin-inline-end:8px">لغو ناوبری</button>
+        <button id="btn-arrow-mode" class="btn" style="padding:4px 8px;margin-inline-end:8px">حالت پیکانی</button>
+        <button id="btn-goto-utm" class="btn" style="padding:4px 8px;margin-inline-end:8px">برو به UTM</button>
+        <button id="btn-settings" class="btn" style="padding:4px 8px;margin-inline-end:8px">تنظیمات</button>
+        <button id="btn-compass-perm" class="btn" style="padding:4px 8px;margin-inline-end:8px">اجازه قطب‌نما</button>
+        <label class="btn" style="padding:4px 8px;margin-inline-end:8px">
+          آفلاین نقشه
+          <input id="mbtiles-input" type="file" accept=".mbtiles" style="display:none" />
+        </label>
+        <button id="toggle-offline" class="btn" style="padding:4px 8px;margin-inline-end:8px">حالت آفلاین</button>
+        <span id="gps-status" class="badge offline">GPS</span>
+        <span id="online-status" class="badge online">آنلاین</span>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <section class="info-panel" id="info-panel">
+        <div class="compass" title="Heading">
+          <div class="compass-rose">
+            <div class="needle needle-red" id="needle-red"></div>
+            <div class="needle needle-green" id="needle-green"></div>
+          </div>
+          <div class="heading" id="heading">—°</div>
+        </div>
+        <div class="readouts">
+          <div class="readout">
+            <label>UTM</label>
+            <div id="utm" class="mono">—</div>
+          </div>
+          <div class="readout small">
+            <label>عرض/طول</label>
+            <div id="latlon" class="mono">—</div>
+          </div>
+          <div class="kpis">
+            <div><span>ارتفاع</span><strong id="alt">—</strong><span>m</span></div>
+            <div><span>سرعت</span><strong id="speed">—</strong><span>km/h</span></div>
+            <div><span>دقت</span><strong id="acc">—</strong><span>m</span></div>
+          </div>
+          <canvas id="sparkline" width="320" height="50" title="Speed/Altitude"></canvas>
+        </div>
+      </section>
+
+      <section class="map-wrap">
+        <div id="map"></div>
+        <div id="measure-overlay" class="measure-overlay hidden"></div>
+        <div id="nav-overlay" class="measure-overlay hidden" style="right:8px;left:auto;top:8px;bottom:auto"></div>
+        <div id="nav-arrow" class="nav-arrow hidden">➤</div>
+        <div id="nav-full" class="nav-full hidden">
+          <div class="nav-full-arrow">➤</div>
+          <div class="nav-full-info mono" id="nav-full-info">—</div>
+          <button id="close-nav-full" class="btn" style="position:absolute;top:12px;left:12px">خروج</button>
+        </div>
+      </section>
+
+      <nav class="action-bar">
+        <button id="toggle-info" class="btn">نمایش/مخفی اطلاعات</button>
+        <button id="btn-mark" class="btn primary">ثبت نقطه</button>
+        <button id="btn-draw" class="btn">ترسیم روی نقشه</button>
+        <button id="btn-waypoints" class="btn">نقاط</button>
+        <button id="btn-print" class="btn accent">A4 / دانلود</button>
+      </nav>
+    </main>
+
+    <!-- Waypoints Modal -->
+    <dialog id="dlg-waypoints" class="modal">
+      <header>
+        <h3>نقاط ثبت‌شده</h3>
+        <button class="icon" id="close-waypoints">✕</button>
+      </header>
+      <div class="modal-body">
+        <ul id="waypoint-list" class="waypoint-list"></ul>
+      </div>
+      <footer>
+        <button id="export-gpx" class="btn">خروجی GPX</button>
+        <button id="export-kml" class="btn">خروجی KML</button>
+        <button id="export-dxf" class="btn">خروجی DXF</button>
+        <button id="export-dxf-drawings" class="btn">DXF ترسیمات</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="mono">زون UTM خروجی:</label>
+          <button id="dxf-utm-39" class="btn">39</button>
+          <button id="dxf-utm-40" class="btn">40</button>
+          <input id="dxf-utm-custom" class="btn" type="number" min="1" max="60" placeholder="زون دلخواه" style="max-width:130px;background:#0a0f0c;color:var(--text-phosphor)" />
+        </div>
+        <button id="share-files" class="btn">اشتراک</button>
+        <button id="import-data" class="btn">ورود GPX/KML</button>
+        <input id="import-file" type="file" accept=".gpx,.kml,application/gpx+xml,application/vnd.google-earth.kml+xml" style="display:none" />
+      </footer>
+    </dialog>
+
+    <!-- Go To UTM Modal -->
+    <dialog id="dlg-goto" class="modal">
+      <header>
+        <h3>برو به مختصات UTM</h3>
+        <button class="icon" id="close-goto">✕</button>
+      </header>
+      <div class="modal-body">
+        <div class="setting">
+          <label>زون</label>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <input id="utm-zone" type="number" min="1" max="60" placeholder="مثال: 39" style="max-width:120px" />
+            <button id="utm-quick-39" class="btn">39</button>
+            <button id="utm-quick-40" class="btn">40</button>
+          </div>
+        </div>
+        <div class="setting">
+          <label>باند (حرف)</label>
+          <input id="utm-band" type="text" maxlength="1" placeholder="مثال: S" />
+        </div>
+        <div class="setting">
+          <label>X (Easting)</label>
+          <input id="utm-easting" type="number" step="1" placeholder="مثال: 448593" />
+        </div>
+        <div class="setting">
+          <label>Y (Northing)</label>
+          <input id="utm-northing" type="number" step="1" placeholder="مثال: 3945732" />
+        </div>
+      </div>
+      <footer>
+        <button id="goto-submit" class="btn primary">حرکت</button>
+      </footer>
+    </dialog>
+
+    <!-- A4 Preview Modal -->
+    <dialog id="dlg-a4" class="modal large">
+      <header>
+        <h3>پیش‌نمایش A4</h3>
+        <button class="icon" id="close-a4">✕</button>
+      </header>
+      <div class="modal-body a4-body">
+        <canvas id="a4-canvas" width="1240" height="1754"></canvas>
+        <div style="display:grid;gap:8px;width:100%;max-width:900px;padding:8px">
+          <div class="setting">
+            <label>عنوان</label>
+            <input id="a4-title" type="text" placeholder="مثال: برداشت پلی‌گون پروژه X" />
+          </div>
+          <div class="setting">
+            <label>پروژه</label>
+            <input id="a4-project" type="text" placeholder="اختیاری" />
+          </div>
+          <div class="setting">
+            <label>برداشت‌کننده</label>
+            <input id="a4-surveyor" type="text" placeholder="اختیاری" />
+          </div>
+          <div class="setting">
+            <label>توضیحات</label>
+            <textarea id="a4-notes" rows="3" placeholder="اطلاعات/توضیحات تکمیلی" style="resize:vertical"></textarea>
+          </div>
+        </div>
+      </div>
+      <footer>
+        <label class="btn" style="padding:4px 8px">
+          مقیاس نقشه
+          <select id="a4-scale-select" class="btn" style="margin-inline-start:8px">
+            <option value="5000">1:5000</option>
+            <option value="10000">1:10000</option>
+          </select>
+        </label>
+        <button id="download-image" class="btn primary">دانلود PNG</button>
+        <button id="download-pdf" class="btn">دانلود PDF</button>
+        <button id="download-jpg" class="btn">دانلود JPG</button>
+      </footer>
+    </dialog>
+
+    <!-- Mark (Averaging) Modal -->
+    <dialog id="dlg-mark" class="modal">
+      <header>
+        <h3>ثبت نقطه (میانگین‌گیری)</h3>
+        <button class="icon" id="close-mark">✕</button>
+      </header>
+      <div class="modal-body">
+        <div class="setting">
+          <div>نمونه‌ها: <span id="avg-count" class="mono">0</span> | دقت میانگین: <span id="avg-acc" class="mono">—</span> m</div>
+          <div class="mono">UTM: <span id="avg-utm">—</span></div>
+          <div class="mono">Lat/Lon: <span id="avg-latlon">—</span></div>
+        </div>
+        <div class="setting">
+          <label>نوع عارضه</label>
+          <select id="mark-type" class="btn">
+            <option value="Point">نقطه</option>
+            <option value="POI">نقطه مهم</option>
+            <option value="Control">کنترل</option>
+          </select>
+        </div>
+        <div class="setting">
+          <label>توضیحات</label>
+          <input id="mark-note" type="text" placeholder="اختیاری" />
+        </div>
+      </div>
+      <footer>
+        <button id="avg-start" class="btn">شروع</button>
+        <button id="avg-stop" class="btn">توقف</button>
+        <button id="avg-save" class="btn primary">ذخیره</button>
+      </footer>
+    </dialog>
+
+    <script src="./app.js"></script>
+
+    <!-- Settings Modal -->
+    <dialog id="dlg-settings" class="modal">
+      <header>
+        <h3>تنظیمات</h3>
+        <button class="icon" id="close-settings">✕</button>
+      </header>
+      <div class="modal-body">
+        <div class="setting">
+          <label>حداکثر خطای قابل قبول (متر)</label>
+          <input id="set-max-acc" type="range" min="3" max="100" step="1" />
+          <div class="mono" id="set-max-acc-val">— m</div>
+        </div>
+        <div class="setting">
+          <label>شعاع هشدار نزدیکی به نقطه (متر)</label>
+          <input id="set-alert-radius" type="range" min="5" max="200" step="5" />
+          <div class="mono" id="set-alert-radius-val">— m</div>
+        </div>
+      </div>
+      <footer>
+        <button id="save-settings" class="btn primary">ذخیره</button>
+      </footer>
+    </dialog>
+
+    <!-- Toasts -->
+    <div id="toasts" class="toasts"></div>
+  </body>
+  </html>
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

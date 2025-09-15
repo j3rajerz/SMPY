@@ -1,0 +1,14 @@
+{
+  "name": "جی‌پی‌اس میدانی",
+  "short_name": "GPS Field",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0B1D14",
+  "theme_color": "#0B1D14",
+  "dir": "rtl",
+  "lang": "fa",
+  "icons": [
+    { "src": "icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
+

@@ -4,6 +4,9 @@
 // We will use Esri Satellite + OSM dark as examples with proper attribution.
 
 let map, draw, drawnItems, trailLine, accuracyCircle;
+let baseLayers = {};
+let currentBaseKey = 'dark';
+let trafficLayer = null;
 let watchId = null;
 let lastPosition = null;
 let trackCoords = [];
@@ -72,26 +75,13 @@ function initMap() {
   const tonerLite = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png', {
     maxZoom: 20, attribution: 'Map tiles by Stamen Design, CC BY 3.0 — Map data © OpenStreetMap', crossOrigin: true
   });
+  baseLayers = { dark: cartoDark, satellite: esriSat, osm: osm, light: tonerLite };
   cartoDark.addTo(map);
 
-  // Simple traffic-style overlay: use Stamen Toner Lines over satellite/dark
-  const tonerLines = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lines/{z}/{x}/{y}.png', {
+  // Simple traffic-style overlay: use Stamen Toner Lines over base
+  trafficLayer = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lines/{z}/{x}/{y}.png', {
     maxZoom: 20, opacity: 0.6, crossOrigin: true
   });
-
-  L.control.layers(
-    {
-      'OSM': osm,
-      'Dark': cartoDark,
-      'Satellite (Esri)': esriSat,
-      'Toner Lite (روشن)': tonerLite,
-    },
-    {
-      'راه‌ها (Toner Lines)': tonerLines,
-      'آفلاین (MBTiles)': offlineLayer || L.layerGroup(),
-    },
-    { position: 'topright', collapsed: false }
-  ).addTo(map);
 
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
@@ -147,6 +137,14 @@ function initMap() {
 
   // Trail polyline with glow effect (duplicated polyline technique)
   trailLine = L.polyline([], { color: '#39ff14', weight: 3, opacity: 0.9 }).addTo(map);
+}
+
+function setBaseLayer(key) {
+  if (!baseLayers[key]) return;
+  // Remove any existing base layer
+  Object.entries(baseLayers).forEach(([k, layer]) => { if (map.hasLayer(layer)) map.removeLayer(layer); });
+  baseLayers[key].addTo(map);
+  currentBaseKey = key;
 }
 
 function updateMeasurementOverlay(layer) {
@@ -766,6 +764,32 @@ function initUI() {
   window.addEventListener('online', setOnlineStatus);
   window.addEventListener('offline', setOnlineStatus);
   setOnlineStatus();
+
+  // Layer selector and traffic toggle
+  const layerSelect = document.getElementById('layer-select');
+  if (layerSelect) {
+    try { layerSelect.value = currentBaseKey; } catch {}
+    layerSelect.onchange = () => {
+      setBaseLayer(layerSelect.value);
+    };
+  }
+  const trafficToggle = document.getElementById('traffic-toggle');
+  if (trafficToggle) {
+    trafficToggle.onchange = () => {
+      if (trafficToggle.checked) {
+        trafficLayer.addTo(map);
+      } else {
+        if (trafficLayer && map.hasLayer(trafficLayer)) map.removeLayer(trafficLayer);
+      }
+    };
+  }
+
+  // Quick Menu
+  const dlgMenu = document.getElementById('dlg-menu');
+  const btnMenu = document.getElementById('btn-quick-menu');
+  const closeMenu = document.getElementById('close-menu');
+  if (btnMenu) btnMenu.onclick = () => dlgMenu.showModal();
+  if (closeMenu) closeMenu.onclick = () => dlgMenu.close();
 
   // Offline toggle
   const toggle = document.getElementById('toggle-offline');

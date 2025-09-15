@@ -40,21 +40,21 @@
   <body>
     <header class="app-header">
       <div class="brand">جی‌پی‌اس میدانی</div>
-      <div class="header-status">
-        <button id="btn-offline-manager" class="btn" style="padding:4px 8px;margin-inline-end:8px">مدیریت آفلاین</button>
-        <button id="btn-log" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت CSV</button>
-        <button id="toggle-track" class="btn" style="padding:4px 8px;margin-inline-end:8px">ثبت مسیر</button>
-        <button id="toggle-follow" class="btn" style="padding:4px 8px;margin-inline-end:8px">دنبال نقشه</button>
-        <button id="clear-nav" class="btn" style="padding:4px 8px;margin-inline-end:8px">لغو ناوبری</button>
-        <button id="btn-arrow-mode" class="btn" style="padding:4px 8px;margin-inline-end:8px">حالت پیکانی</button>
-        <button id="btn-goto-utm" class="btn" style="padding:4px 8px;margin-inline-end:8px">برو به UTM</button>
-        <button id="btn-settings" class="btn" style="padding:4px 8px;margin-inline-end:8px">تنظیمات</button>
-        <button id="btn-compass-perm" class="btn" style="padding:4px 8px;margin-inline-end:8px">اجازه قطب‌نما</button>
-        <label class="btn" style="padding:4px 8px;margin-inline-end:8px">
-          آفلاین نقشه
-          <input id="mbtiles-input" type="file" accept=".mbtiles" style="display:none" />
+      <div class="header-status" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label class="btn" style="padding:6px 8px;margin-inline-end:4px">
+          لایه
+          <select id="layer-select" class="btn" style="margin-inline-start:6px;padding:4px 6px;min-height:32px">
+            <option value="dark">تاریک</option>
+            <option value="satellite">ماهواره‌ای</option>
+            <option value="osm">نقشه</option>
+            <option value="light">روشن</option>
+          </select>
         </label>
-        <button id="toggle-offline" class="btn" style="padding:4px 8px;margin-inline-end:8px">حالت آفلاین</button>
+        <label class="btn" style="padding:6px 8px;margin-inline-end:4px">
+          ترافیک
+          <input id="traffic-toggle" type="checkbox" style="margin-inline-start:6px;transform:translateY(2px)" />
+        </label>
+        <button id="btn-quick-menu" class="btn" style="padding:6px 10px;margin-inline-end:4px">منو</button>
         <span id="gps-status" class="badge offline">GPS</span>
         <span id="online-status" class="badge online">آنلاین</span>
       </div>
@@ -241,6 +241,33 @@
     </dialog>
 
     <script src="./app.js"></script>
+
+    <!-- Quick Menu Modal (moved cluttered actions here) -->
+    <dialog id="dlg-menu" class="modal">
+      <header>
+        <h3>منوی سریع</h3>
+        <button class="icon" id="close-menu">✕</button>
+      </header>
+      <div class="modal-body" style="display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+        <button id="btn-offline-manager" class="btn">مدیریت آفلاین</button>
+        <label class="btn" style="display:flex;align-items:center;justify-content:center;gap:6px">
+          ورود MBTiles
+          <input id="mbtiles-input" type="file" accept=".mbtiles" style="display:none" />
+        </label>
+        <button id="toggle-offline" class="btn">حالت آفلاین</button>
+        <button id="btn-log" class="btn">ثبت CSV</button>
+        <button id="toggle-track" class="btn">ثبت مسیر</button>
+        <button id="toggle-follow" class="btn">دنبال نقشه</button>
+        <button id="clear-nav" class="btn">لغو ناوبری</button>
+        <button id="btn-arrow-mode" class="btn">حالت پیکانی</button>
+        <button id="btn-goto-utm" class="btn">برو به UTM</button>
+        <button id="btn-settings" class="btn">تنظیمات</button>
+        <button id="btn-compass-perm" class="btn">اجازه قطب‌نما</button>
+      </div>
+      <footer>
+        <div style="font-size:12px;color:#98b18d">برای سادگی، دکمه‌ها به این منو منتقل شدند</div>
+      </footer>
+    </dialog>
 
     <!-- Settings Modal -->
     <dialog id="dlg-settings" class="modal">

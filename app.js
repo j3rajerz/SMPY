@@ -17,6 +17,8 @@ let offlineLayer = null;
 let SQL = null;
 let mbtilesDb = null;
 const SETTINGS_KEY = 'fieldgps.settings.v1';
+const UI_LAYER_KEY = 'fieldgps.ui.baseLayer.v1';
+const UI_TRAFFIC_KEY = 'fieldgps.ui.traffic.v1';
 let settings = { maxAccM: 20, alertRadiusM: 30 };
 let speedHistory = []; // last N speeds (km/h)
 let altHistory = [];   // last N altitudes (m)
@@ -75,7 +77,10 @@ function initMap() {
   const tonerLite = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png', {
     maxZoom: 20, attribution: 'Map tiles by Stamen Design, CC BY 3.0 — Map data © OpenStreetMap', crossOrigin: true
   });
-  baseLayers = { dark: cartoDark, satellite: esriSat, osm: osm, light: tonerLite };
+  const openTopo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17, attribution: '© OpenTopoMap (CC-BY-SA)', crossOrigin: true
+  });
+  baseLayers = { dark: cartoDark, satellite: esriSat, osm: osm, light: tonerLite, terrain: openTopo };
   cartoDark.addTo(map);
 
   // Simple traffic-style overlay: use Stamen Toner Lines over base
@@ -145,6 +150,9 @@ function setBaseLayer(key) {
   Object.entries(baseLayers).forEach(([k, layer]) => { if (map.hasLayer(layer)) map.removeLayer(layer); });
   baseLayers[key].addTo(map);
   currentBaseKey = key;
+  try { localStorage.setItem(UI_LAYER_KEY, key); } catch {}
+  const sel = document.getElementById('layer-select');
+  if (sel && sel.value !== key) sel.value = key;
 }
 
 function updateMeasurementOverlay(layer) {
@@ -768,19 +776,32 @@ function initUI() {
   // Layer selector and traffic toggle
   const layerSelect = document.getElementById('layer-select');
   if (layerSelect) {
-    try { layerSelect.value = currentBaseKey; } catch {}
+    // Restore saved base layer
+    try {
+      const savedBase = localStorage.getItem(UI_LAYER_KEY);
+      if (savedBase && baseLayers[savedBase]) { currentBaseKey = savedBase; setBaseLayer(savedBase); }
+      layerSelect.value = currentBaseKey;
+    } catch {}
     layerSelect.onchange = () => {
       setBaseLayer(layerSelect.value);
     };
   }
   const trafficToggle = document.getElementById('traffic-toggle');
   if (trafficToggle) {
+    // Restore saved traffic
+    try {
+      const saved = localStorage.getItem(UI_TRAFFIC_KEY);
+      const on = saved === '1';
+      trafficToggle.checked = on;
+      if (on) trafficLayer.addTo(map);
+    } catch {}
     trafficToggle.onchange = () => {
       if (trafficToggle.checked) {
         trafficLayer.addTo(map);
       } else {
         if (trafficLayer && map.hasLayer(trafficLayer)) map.removeLayer(trafficLayer);
       }
+      try { localStorage.setItem(UI_TRAFFIC_KEY, trafficToggle.checked ? '1' : '0'); } catch {}
     };
   }
 

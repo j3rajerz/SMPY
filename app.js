@@ -66,7 +66,7 @@ function initMap() {
   map = L.map('map', {
     zoomControl: true,
     attributionControl: true,
-  }).setView([35.6892, 51.3890], 13);
+  }).setView([35.6892, 51.3890], 12);
 
   // Base layers (no API key): OSM, CARTO Dark, ESRI WorldImagery, and Stamen Toner Lite (traffic-like contrast)
   const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -280,7 +280,7 @@ function onPosition(pos) {
   }
 
   // Center map on first fix
-  if (trackCoords.length === 1 || followMode) { map.setView([latitude, longitude], followMode ? map.getZoom() : 17); }
+  if (trackCoords.length === 1 || followMode) { map.setView([latitude, longitude], map.getZoom()); }
 
   setGpsStatus(true);
 

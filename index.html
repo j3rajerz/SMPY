@@ -38,6 +38,14 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- GPS Permission Overlay -->
+    <div id="gpsPermOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:2000;align-items:center;justify-content:center;">
+      <div style="background:#0b1510;border:2px solid #556b2f;border-radius:8px;padding:16px;max-width:420px;width:92%;text-align:center;color:#a6ff00">
+        <div style="font-weight:900;margin-bottom:8px">دسترسی به موقعیت جغرافیایی</div>
+        <div style="color:#b8ff74;margin-bottom:12px">برای نمایش و ثبت موقعیت، اجازه دسترسی به GPS را بدهید.</div>
+        <button class="btn" id="btnRequestGPS">اجازه بده</button>
+      </div>
+    </div>
     <header class="app-header">
       <div class="brand">جی‌پی‌اس میدانی</div>
       <div class="header-status" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -295,6 +303,17 @@
 
     <!-- Toasts -->
     <div id="toasts" class="toasts"></div>
+    <script>
+      // دکمه درخواست دستی اجازه GPS
+      document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('btnRequestGPS');
+        if (btn) btn.addEventListener('click', () => {
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(() => {}, () => {}, { enableHighAccuracy: true, timeout: 10000 });
+          }
+        });
+      });
+    </script>
   </body>
   </html>
 
@@ -1314,13 +1333,15 @@
         function initializeApp() {
             setupEventListeners();
             initializeMaps();
+            ensureGpsPermissionPrompt();
             startGPSTracking();
             updateTime();
             simulateSatelliteData();
             loadSettings();
             
             setInterval(updateTime, 1000);
-            setInterval(updateSatelliteDisplay, 2000);
+            // هر ۲ ثانیه مقدار SNR را کمی تغییر دهیم تا تغییرات نشان داده شود (در صورت نبود داده واقعی GNSS)
+            setInterval(() => { mutateSatellites(); updateSatelliteDisplay(); }, 2000);
         }
 
         // GNSS over Web Serial (NMEA)
@@ -1487,6 +1508,8 @@
         function handlePositionUpdate(position) {
             AppState.currentPosition = position;
             AppState.gpsStatus = 'active';
+            const ov = document.getElementById('gpsPermOverlay');
+            if (ov) ov.style.display = 'none';
             
             const coords = position.coords;
             updateGPSDisplay(coords);
@@ -1821,6 +1844,34 @@
                     active: Math.random() > 0.4
                 });
             }
+        }
+
+        // تغییرات کوچک تصادفی برای نمایش پویایی قدرت ماهواره‌ها در صورت نبود داده زنده
+        function mutateSatellites() {
+            const jitter = (v) => Math.max(1, Math.min(45, v + Math.floor(Math.random()*7) - 3));
+            ['gps','glonass'].forEach(sys => {
+                AppState.satellites[sys] = AppState.satellites[sys].map(s => ({
+                    ...s,
+                    snr: jitter(s.snr || 20),
+                    active: Math.random() > 0.2
+                }));
+            });
+        }
+
+        // نمایش درخواست دسترسی به GPS در شروع کار
+        async function ensureGpsPermissionPrompt() {
+            try {
+                if (!navigator.permissions) { return; }
+                const st = await navigator.permissions.query({ name: 'geolocation' });
+                if (st.state !== 'granted') {
+                    const ov = document.getElementById('gpsPermOverlay');
+                    if (ov) ov.style.display = 'flex';
+                }
+                st.onchange = () => {
+                    const ov = document.getElementById('gpsPermOverlay');
+                    if (st.state === 'granted' && ov) ov.style.display = 'none';
+                };
+            } catch {}
         }
 
         function updateSatelliteDisplay() {

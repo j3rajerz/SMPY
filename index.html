@@ -1153,12 +1153,11 @@
                 attribution: '© OpenStreetMap contributors'
             }).addTo(mapCapture);
             
-            // نقشه ترسیم
+            // نقشه ترسیم (بدون کلید API - Esri World Imagery)
             mapDraw = L.map('mapDraw').setView([35.6892, 51.3890], 15);
-            L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 maxZoom: 20,
-                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-                attribution: 'Google Satellite'
+                attribution: 'Esri — World Imagery'
             }).addTo(mapDraw);
             
             // نقشه نتیجه
@@ -1422,9 +1421,10 @@
 
             if (!mapSatellite) {
                 mapSatellite = L.map('mapSatellite', { zoomControl: false, attributionControl: false }).setView(center, 18);
-                L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+                // ماهواره بدون API Key
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                     maxZoom: 20,
-                    subdomains: ['mt0','mt1','mt2','mt3']
+                    attribution: 'Esri — World Imagery'
                 }).addTo(mapSatellite);
             } else { mapSatellite.invalidateSize(); mapSatellite.setView(center); }
 

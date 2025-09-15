@@ -94,6 +94,7 @@
         <div id="map"></div>
         <div id="measure-overlay" class="measure-overlay hidden"></div>
         <div id="nav-overlay" class="measure-overlay hidden" style="right:8px;left:auto;top:8px;bottom:auto"></div>
+        <div id="final-overlay" class="measure-overlay hidden" style="top:8px;bottom:auto"></div>
         <div id="nav-arrow" class="nav-arrow hidden">➤</div>
         <div id="nav-full" class="nav-full hidden">
           <div class="nav-full-arrow">➤</div>
@@ -106,6 +107,8 @@
         <button id="toggle-info" class="btn">نمایش/مخفی اطلاعات</button>
         <button id="btn-mark" class="btn primary">ثبت نقطه</button>
         <button id="btn-draw" class="btn">ترسیم روی نقشه</button>
+        <button id="btn-finish-draw" class="btn">پایان ترسیم</button>
+        <button id="btn-finish-survey" class="btn">پایان برداشت</button>
         <button id="btn-review" class="btn">بررسی</button>
         <button id="btn-plot" class="btn">ترسیم</button>
         <button id="btn-waypoints" class="btn">نقاط</button>
@@ -210,6 +213,9 @@
         <button id="download-image" class="btn primary">دانلود PNG</button>
         <button id="download-pdf" class="btn">دانلود PDF</button>
         <button id="download-jpg" class="btn">دانلود JPG</button>
+        <button id="download-kml" class="btn">دانلود KML</button>
+        <button id="download-dxf-a4" class="btn">دانلود DXF</button>
+        <button id="share-a4" class="btn">اشتراک</button>
       </footer>
     </dialog>
 
@@ -288,6 +294,7 @@
         <button id="btn-settings" class="btn">تنظیمات</button>
         <button id="btn-compass-perm" class="btn">اجازه قطب‌نما</button>
         <button id="btn-gnss" class="btn">اتصال GNSS (NMEA)</button>
+        <button id="btn-precise-mark" class="btn">ثبت دقیق</button>
       </div>
       <footer>
         <div style="font-size:12px;color:#98b18d">برای سادگی، دکمه‌ها به این منو منتقل شدند</div>

@@ -57,6 +57,7 @@
         </label>
         <button id="btn-quick-menu" class="btn" style="padding:6px 10px;margin-inline-end:4px">منو</button>
         <span id="gps-status" class="badge offline">GPS</span>
+        <span id="sat-status" class="badge">SAT —</span>
         <span id="online-status" class="badge online">آنلاین</span>
       </div>
     </header>
@@ -85,6 +86,7 @@
             <div><span>دقت</span><strong id="acc">—</strong><span>m</span></div>
           </div>
           <canvas id="sparkline" width="320" height="50" title="Speed/Altitude"></canvas>
+          <canvas id="sat-snr" width="320" height="60" title="Satellites SNR" style="border:2px solid var(--green-olive);border-radius:6px;background:#0a110d;box-shadow: inset 0 0 12px rgba(0,0,0,0.4);"></canvas>
         </div>
       </section>
 
@@ -104,6 +106,8 @@
         <button id="toggle-info" class="btn">نمایش/مخفی اطلاعات</button>
         <button id="btn-mark" class="btn primary">ثبت نقطه</button>
         <button id="btn-draw" class="btn">ترسیم روی نقشه</button>
+        <button id="btn-review" class="btn">بررسی</button>
+        <button id="btn-plot" class="btn">ترسیم</button>
         <button id="btn-waypoints" class="btn">نقاط</button>
         <button id="btn-print" class="btn accent">A4 / دانلود</button>
       </nav>
@@ -209,6 +213,25 @@
       </footer>
     </dialog>
 
+    <!-- Review Modal -->
+    <dialog id="dlg-review" class="modal">
+      <header>
+        <h3>فرم اطلاعات نقشه</h3>
+        <button class="icon" id="close-review">✕</button>
+      </header>
+      <div class="modal-body" style="display:grid;gap:8px">
+        <div class="setting"><label>نام و نام خانوادگی</label><input id="fi-fullname" type="text" /></div>
+        <div class="setting"><label>نام پدر</label><input id="fi-father" type="text" /></div>
+        <div class="setting"><label>کد ملی</label><input id="fi-nid" type="text" inputmode="numeric" /></div>
+        <div class="setting"><label>منطقه</label><input id="fi-region" type="text" /></div>
+        <div class="setting"><label>پلاک اصلی</label><input id="fi-parcel-main" type="text" /></div>
+        <div class="setting"><label>پلاک فرعی</label><input id="fi-parcel-sub" type="text" /></div>
+        <div class="setting"><label>مساحت (خودکار)</label><input id="fi-area" type="text" readonly /></div>
+        <div class="setting"><label>محیط (محاسبه)</label><input id="fi-perimeter" type="text" readonly /></div>
+        <div class="setting"><button id="fi-save" class="btn primary">ثبت</button></div>
+      </div>
+    </dialog>
+
     <!-- Mark (Averaging) Modal -->
     <dialog id="dlg-mark" class="modal">
       <header>
@@ -264,6 +287,7 @@
         <button id="btn-goto-utm" class="btn">برو به UTM</button>
         <button id="btn-settings" class="btn">تنظیمات</button>
         <button id="btn-compass-perm" class="btn">اجازه قطب‌نما</button>
+        <button id="btn-gnss" class="btn">اتصال GNSS (NMEA)</button>
       </div>
       <footer>
         <div style="font-size:12px;color:#98b18d">برای سادگی، دکمه‌ها به این منو منتقل شدند</div>

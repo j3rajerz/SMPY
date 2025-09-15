@@ -12,6 +12,7 @@ let lastPosition = null;
 let trackCoords = [];
 let waypoints = [];
 const WAYPOINTS_KEY = 'fieldgps.waypoints.v1';
+const FORM_INFO_KEY = 'fieldgps.formInfo.v1';
 let useOffline = false;
 let offlineLayer = null;
 let SQL = null;
@@ -29,6 +30,9 @@ let navTarget = null; // {lat, lon, label} or null
 let navLine = null;
 let averaging = { active: false, samples: [] };
 let loggingCsv = { active: false, rows: [] };
+let nmea = { connected: false, sats: [], device: null, reader: null };
+let fieldPolygon = null; // Polygon built from waypoints
+let formInfo = { fullname: '', father: '', nid: '', region: '', parcelMain: '', parcelSub: '' };
 
 // UTM helpers using proj4
 function getUtmZone(longitude) {
@@ -299,6 +303,7 @@ function setGpsStatus(ok) {
   el.textContent = ok ? 'GPS' : 'GPS?';
   el.classList.toggle('offline', !ok);
   el.classList.toggle('online', ok);
+  updateSatBadge();
 }
 
 function setOnlineStatus() {
@@ -306,6 +311,14 @@ function setOnlineStatus() {
   const online = navigator.onLine;
   el.textContent = online ? 'ONLINE' : 'OFFLINE';
   el.classList.toggle('online', online);
+}
+
+function updateSatBadge() {
+  const el = document.getElementById('sat-status'); if (!el) return;
+  const count = nmea.sats?.length || 0;
+  const fix = lastPosition ? (lastPosition.coords.accuracy != null) : false;
+  el.textContent = `SAT ${count}${nmea.connected ? '' : ''}`;
+  el.classList.toggle('online', fix || nmea.connected);
 }
 
 function addWaypointFromCurrent() {
@@ -390,6 +403,13 @@ function loadWaypoints() {
   } catch {}
 }
 
+function saveFormInfo() {
+  try { localStorage.setItem(FORM_INFO_KEY, JSON.stringify(formInfo)); } catch {}
+}
+function loadFormInfo() {
+  try { const s = localStorage.getItem(FORM_INFO_KEY); if (s) formInfo = JSON.parse(s); } catch {}
+}
+
 function exportGPX() {
   const header = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="FieldGPS" xmlns="http://www.topografix.com/GPX/1/1">`;
   const pts = waypoints.map(w => `<wpt lat="${w.lat}" lon="${w.lon}"><time>${w.timestamp}</time><name>${w.id}</name></wpt>`).join('');
@@ -403,7 +423,16 @@ function exportKML() {
   const header = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>`;
   const pts = waypoints.map(w => `<Placemark><name>${w.id}</name><Point><coordinates>${w.lon},${w.lat},${w.altitudeM ?? 0}</coordinates></Point></Placemark>`).join('');
   const line = trackCoords.length ? `<Placemark><name>track</name><LineString><coordinates>${trackCoords.map(([lat, lon]) => `${lon},${lat},0`).join(' ')}</coordinates></LineString></Placemark>` : '';
-  const xml = `${header}${pts}${line}</Document></kml>`;
+  // Polygon from drawnItems if exists
+  let polyStr = '';
+  drawnItems.eachLayer((layer) => {
+    if (layer instanceof L.Polygon && !polyStr) {
+      const rings = layer.getLatLngs(); const flat = Array.isArray(rings[0]) ? rings[0] : rings;
+      const coords = [...flat.map(ll=>`${ll.lng},${ll.lat},0`), `${flat[0].lng},${flat[0].lat},0`].join(' ');
+      polyStr = `<Placemark><name>boundary</name><Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;
+    }
+  });
+  const xml = `${header}${pts}${line}${polyStr}</Document></kml>`;
   downloadText('track.kml', xml, 'application/vnd.google-earth.kml+xml');
 }
 
@@ -467,15 +496,54 @@ function exportDXFDrawings(utmZone) {
   downloadText(name, dxf, 'image/vnd.dxf');
 }
 
+function buildDXFFromDrawings(utmZone) {
+  const header = [ '0','SECTION','2','HEADER','0','ENDSEC','0','SECTION','2','TABLES','0','ENDSEC','0','SECTION','2','ENTITIES' ];
+  const ents = [];
+  let forward = null;
+  if (Number.isFinite(utmZone)) {
+    const projStr = `+proj=utm +zone=${utmZone} +north +datum=WGS84 +units=m +no_defs`;
+    forward = proj4('EPSG:4326', projStr);
+  }
+  drawnItems.eachLayer((layer) => {
+    if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+      const pts = layer.getLatLngs();
+      const xy = pts.map(ll => forward ? forward.forward([ll.lng, ll.lat]) : [ll.lng, ll.lat]);
+      ents.push('0','LWPOLYLINE','8','DRAWINGS','90',String(xy.length),'70','0');
+      for (const [x,y] of xy) { ents.push('10',String(x),'20',String(y)); }
+    }
+    if (layer instanceof L.Polygon) {
+      const rings = layer.getLatLngs();
+      const flat = Array.isArray(rings[0]) ? rings[0] : rings;
+      const xy = flat.map(ll => forward ? forward.forward([ll.lng, ll.lat]) : [ll.lng, ll.lat]);
+      ents.push('0','LWPOLYLINE','8','DRAWINGS','90',String(xy.length + 1),'70','1');
+      for (const [x,y] of xy) { ents.push('10',String(x),'20',String(y)); }
+      const [fx,fy] = xy[0]; ents.push('10',String(fx),'20',String(fy));
+    }
+  });
+  const footer = ['0','ENDSEC','0','EOF'];
+  return [...header, ...ents, ...footer].join('\n');
+}
+
 async function shareFilesIfSupported() {
-  if (!('canShare' in navigator) || !('share' in navigator)) return;
-  // Prepare a small GPX Blob as example
-  const header = `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="FieldGPS" xmlns="http://www.topografix.com/GPX/1/1">`;
-  const pts = waypoints.map(w => `<wpt lat=\"${w.lat}\" lon=\"${w.lon}\"><time>${w.timestamp}</time><name>${w.id}</name></wpt>`).join('');
-  const xml = `${header}${pts}</gpx>`;
-  const file = new File([xml], 'points.gpx', { type: 'application/gpx+xml' });
-  if (navigator.canShare({ files: [file] })) {
-    await navigator.share({ files: [file], title: 'Field GPS', text: 'Waypoints' });
+  if (!('canShare' in navigator) || !('share' in navigator)) { toast('اشتراک در این دستگاه پشتیبانی نمی‌شود', 'warn'); return; }
+  const files = [];
+  // A4 PNG
+  await renderA4Structured();
+  const c = document.getElementById('a4-canvas');
+  const pngBlob = await (await fetch(c.toDataURL('image/png'))).blob();
+  files.push(new File([pngBlob], 'map-a4.png', { type: 'image/png' }));
+  // KML
+  const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>`;
+  const kmlPts = waypoints.map(w => `<Placemark><name>${w.id}</name><Point><coordinates>${w.lon},${w.lat},${w.altitudeM ?? 0}</coordinates></Point></Placemark>`).join('');
+  const kmlXml = `${kmlHeader}${kmlPts}</Document></kml>`;
+  files.push(new File([kmlXml], 'points.kml', { type: 'application/vnd.google-earth.kml+xml' }));
+  // DXF from drawings
+  const dxfText = buildDXFFromDrawings();
+  files.push(new File([dxfText], 'drawings.dxf', { type: 'image/vnd.dxf' }));
+  if (navigator.canShare({ files })) {
+    await navigator.share({ files, title: 'Field GPS', text: 'نقشه و فایل‌ها' });
+  } else {
+    toast('اشتراک فایل‌ها امکان‌پذیر نیست', 'warn');
   }
 }
 
@@ -591,92 +659,261 @@ function closeWaypointsDialog() {
   document.getElementById('dlg-waypoints').close();
 }
 
-function openA4Preview() {
-  // Render Leaflet snapshot then write to an A4 canvas with decorations
+function openReview() {
+  loadFormInfo();
+  const dlg = document.getElementById('dlg-review');
+  const f = formInfo;
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  setVal('fi-fullname', f.fullname);
+  setVal('fi-father', f.father);
+  setVal('fi-nid', f.nid);
+  setVal('fi-region', f.region);
+  setVal('fi-parcel-main', f.parcelMain);
+  setVal('fi-parcel-sub', f.parcelSub);
+  // compute area/perimeter from current polygon if available
+  const { areaM2, perimM } = computeFieldMetrics();
+  const areaEl = document.getElementById('fi-area'); if (areaEl) areaEl.value = areaM2 ? areaM2.toFixed(2) + ' m²' : '-';
+  const perEl = document.getElementById('fi-perimeter'); if (perEl) perEl.value = perimM ? perimM.toFixed(2) + ' m' : '-';
+  const saveBtn = document.getElementById('fi-save'); if (saveBtn) saveBtn.onclick = saveReviewForm;
+  const closeBtn = document.getElementById('close-review'); if (closeBtn) closeBtn.onclick = () => dlg.close();
+  dlg.showModal();
+}
+
+function saveReviewForm() {
+  const getVal = (id) => document.getElementById(id)?.value || '';
+  formInfo = {
+    fullname: getVal('fi-fullname'),
+    father: getVal('fi-father'),
+    nid: getVal('fi-nid'),
+    region: getVal('fi-region'),
+    parcelMain: getVal('fi-parcel-main'),
+    parcelSub: getVal('fi-parcel-sub'),
+  };
+  saveFormInfo();
+  document.getElementById('dlg-review').close();
+  toast('اطلاعات ثبت شد', 'success');
+}
+
+function getPolygonLatLngs() {
+  // Prefer first drawn polygon
+  let pts = null;
+  drawnItems.eachLayer((layer) => {
+    if (!pts && layer instanceof L.Polygon) {
+      const rings = layer.getLatLngs();
+      const flat = Array.isArray(rings[0]) ? rings[0] : rings;
+      pts = flat.map(ll => [ll.lat, ll.lng]);
+    }
+  });
+  if (pts) return pts;
+  // Fallback: use waypoints order
+  if (waypoints.length >= 3) {
+    return waypoints.map(w => [w.lat, w.lon]);
+  }
+  return null;
+}
+
+function computeFieldMetrics() {
+  const pts = getPolygonLatLngs();
+  if (!pts || pts.length < 3) return { areaM2: null, perimM: null };
+  const poly = turf.polygon([[...pts.map(([lat,lon])=>[lon,lat]), [pts[0][1], pts[0][0]]]]);
+  const areaM2 = turf.area(poly);
+  // perimeter from line around
+  const line = turf.lineString([...pts.map(([lat,lon])=>[lon,lat]), [pts[0][1], pts[0][0]]]);
+  const perimM = turf.length(line, { units: 'kilometers' }) * 1000;
+  return { areaM2, perimM };
+}
+
+function drawFieldPolygon() {
+  const pts = getPolygonLatLngs();
+  if (!pts) { toast('نقاط کافی برای ترسیم وجود ندارد', 'warn'); return; }
+  if (fieldPolygon) { map.removeLayer(fieldPolygon); fieldPolygon = null; }
+  fieldPolygon = L.polygon(pts, { color: '#39ff14', weight: 3, fillOpacity: 0.1 }).addTo(map);
+  map.fitBounds(fieldPolygon.getBounds(), { padding: [20,20] });
+  const { areaM2, perimM } = computeFieldMetrics();
+  toast(`مساحت: ${areaM2?.toFixed(1)} m² | محیط: ${perimM?.toFixed(1)} m`, 'success');
+}
+async function openA4Preview() {
+  await renderA4Structured();
+  document.getElementById('dlg-a4').showModal();
+}
+
+async function renderA4Structured() {
   const canvas = document.getElementById('a4-canvas');
   const ctx = canvas.getContext('2d');
+  // Canvas reset
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Page margins
+  const margin = 50;
+  const page = { x: margin, y: margin, w: canvas.width - margin*2, h: canvas.height - margin*2 };
+  // Header bar
+  ctx.fillStyle = '#0b1d14';
+  ctx.fillRect(0, 0, canvas.width, 44);
+  ctx.fillStyle = '#a6ff00';
+  ctx.font = 'bold 18px Arial';
+  const title = document.getElementById('a4-title')?.value || 'فرم برداشت و ترسیم زمین';
+  ctx.fillText(title, margin, 30);
 
-  leafletImage(map, function(err, mapCanvas) {
-    if (err) { console.error(err); return; }
-    // Fit map image into A4 with margins
-    const margin = 60;
-    const targetW = canvas.width - margin * 2;
-    const targetH = canvas.height - margin * 2 - 140; // space for footer
-    const scale = Math.min(targetW / mapCanvas.width, targetH / mapCanvas.height);
-    const drawW = Math.floor(mapCanvas.width * scale);
-    const drawH = Math.floor(mapCanvas.height * scale);
-    const dx = Math.floor((canvas.width - drawW) / 2);
-    const dy = margin;
+  // Layout regions
+  const leftW = Math.floor(page.w * 0.6);
+  const rightW = page.w - leftW - 10;
+  const mapBox = { x: page.x, y: page.y + 10, w: leftW, h: Math.floor(page.h * 0.42) };
+  const tableBox = { x: page.x, y: mapBox.y + mapBox.h + 12, w: leftW, h: Math.floor(page.h * 0.20) };
+  const infoBox = { x: page.x + leftW + 10, y: page.y + 10, w: rightW, h: Math.floor(page.h * 0.32) };
+  const satBox = { x: infoBox.x, y: infoBox.y + infoBox.h + 10, w: rightW, h: Math.floor(page.h * 0.28) };
+  const trafBox = { x: infoBox.x, y: satBox.y + satBox.h + 10, w: rightW, h: Math.floor(page.h * 0.16) };
 
-    ctx.drawImage(mapCanvas, dx, dy, drawW, drawH);
+  // Draw frames
+  const strokeFrame = (r) => { ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.strokeRect(r.x, r.y, r.w, r.h); };
+  strokeFrame(mapBox); strokeFrame(tableBox); strokeFrame(infoBox); strokeFrame(satBox); strokeFrame(trafBox);
 
-    // Header
-    ctx.fillStyle = '#0b1d14';
-    ctx.fillRect(0, 0, canvas.width, 48);
-    ctx.fillStyle = '#a6ff00';
-    ctx.font = 'bold 20px Barlow, Arial';
-    ctx.fillText('FIELD GPS — A4 Map Sheet', margin, 32);
+  // Top-left: White background polygon map with edge lengths
+  const pts = getPolygonLatLngs();
+  if (pts && pts.length >= 3) {
+    drawPolygonBox(ctx, mapBox, pts);
+  } else {
+    ctx.fillStyle = '#666'; ctx.font = '14px Arial'; ctx.fillText('پلیگون تعریف نشده', mapBox.x + 12, mapBox.y + 22);
+  }
 
-    // Footer info: UTM/LatLon/time
-    ctx.fillStyle = '#0b1d14';
-    ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
-    ctx.fillStyle = '#a6ff00';
-    ctx.font = '16px IBM Plex Mono, monospace';
-    if (lastPosition) {
-      const { latitude, longitude } = lastPosition.coords;
-      const utm = toUtm(latitude, longitude);
-      ctx.fillText(`Center: UTM ${utm.zone}${utm.band} ${utm.easting} ${utm.northing}`, margin, canvas.height - 64);
-      ctx.fillText(`Center: Lat/Lon ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`, margin, canvas.height - 40);
-    }
-    ctx.fillText(`Generated: ${new Date().toLocaleString()}`, margin, canvas.height - 16);
+  // Under map: coordinate table (UTM)
+  if (pts && pts.length >= 3) {
+    drawCoordinateTable(ctx, tableBox, pts);
+  }
 
-    // Simple north arrow
-    drawNorthArrow(ctx, canvas.width - margin - 40, canvas.height - 60);
+  // Right: info card
+  drawInfoBox(ctx, infoBox);
 
-    // Scale bar and grid with selected scale
-    const scaleSelect = document.getElementById('a4-scale-select');
-    const denom = parseInt(scaleSelect?.value || '10000');
-    drawScaleBar(ctx, dx, dy + drawH + 16, drawW);
+  // Satellite snapshot with polygon
+  if (pts && pts.length >= 3) {
+    const satImg = await snapshotMapWithBase('satellite', true, pts);
+    if (satImg) ctx.drawImage(satImg, satBox.x + 2, satBox.y + 2, satBox.w - 4, satBox.h - 4);
+  }
 
-    // Draw UTM grid (simple) every 1000 m if zoomed in enough
-    try {
-      const center = map.getCenter();
-      const { proj } = getUtmProj(center.lng, center.lat);
-      const topLeftLatLng = map.containerPointToLatLng([0, 0]);
-      const bottomRightLatLng = map.containerPointToLatLng([map.getSize().x, map.getSize().y]);
-      const [minX, maxY] = proj.forward([topLeftLatLng.lng, topLeftLatLng.lat]);
-      const [maxX, minY] = proj.forward([bottomRightLatLng.lng, bottomRightLatLng.lat]);
-      // Step based on scale denominator (1:5000 => 500 m grid, 1:10000 => 1000 m)
-      const step = denom <= 5000 ? 500 : 1000;
-      ctx.strokeStyle = 'rgba(166,255,0,0.2)'; ctx.lineWidth = 1;
-      for (let x = Math.floor(minX/step)*step; x <= Math.ceil(maxX/step)*step; x += step) {
-        const p1 = proj.inverse([x, minY]); const p2 = proj.inverse([x, maxY]);
-        const a = map.latLngToContainerPoint([p1[1], p1[0]]);
-        const b = map.latLngToContainerPoint([p2[1], p2[0]]);
-        const ax = dx + (a.x / map.getSize().x) * drawW; const ay = dy + (a.y / map.getSize().y) * drawH;
-        const bx = dx + (b.x / map.getSize().x) * drawW; const by = dy + (b.y / map.getSize().y) * drawH;
-        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-        // Label Easting
-        ctx.fillStyle = '#a6ff00'; ctx.font = '12px IBM Plex Mono, monospace';
-        ctx.fillText(`E ${Math.round(x)}`, ax + 4, Math.min(ay + 14, dy + drawH - 4));
-      }
-      for (let y = Math.floor(minY/step)*step; y <= Math.ceil(maxY/step)*step; y += step) {
-        const p1 = proj.inverse([minX, y]); const p2 = proj.inverse([maxX, y]);
-        const a = map.latLngToContainerPoint([p1[1], p1[0]]);
-        const b = map.latLngToContainerPoint([p2[1], p2[0]]);
-        const ax = dx + (a.x / map.getSize().x) * drawW; const ay = dy + (a.y / map.getSize().y) * drawH;
-        const bx = dx + (b.x / map.getSize().x) * drawW; const by = dy + (b.y / map.getSize().y) * drawH;
-        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-        // Label Northing
-        ctx.fillStyle = '#a6ff00'; ctx.font = '12px IBM Plex Mono, monospace';
-        ctx.fillText(`N ${Math.round(y)}`, Math.min(bx - 64, dx + drawW - 64), ay - 4);
-      }
-    } catch {}
+  // Traffic small map (OSM + traffic overlay)
+  const trafImg = await snapshotMapWithBase('osm', true, pts, true);
+  if (trafImg) ctx.drawImage(trafImg, trafBox.x + 2, trafBox.y + 2, trafBox.w - 4, trafBox.h - 4);
 
-    document.getElementById('dlg-a4').showModal();
+  // Footer
+  ctx.fillStyle = '#0b1d14';
+  ctx.fillRect(0, canvas.height - 44, canvas.width, 44);
+  ctx.fillStyle = '#a6ff00'; ctx.font = '14px IBM Plex Mono, monospace';
+  ctx.fillText(new Date().toLocaleString(), margin, canvas.height - 16);
+}
+
+function drawPolygonBox(ctx, box, ptsLatLon) {
+  // Project to local UTM for stable scaling
+  const center = ptsLatLon.reduce((s,p)=>[s[0]+p[0], s[1]+p[1]],[0,0]).map(v=>v/ptsLatLon.length);
+  const { proj } = getUtmProj(center[1], center[0]);
+  const xy = ptsLatLon.map(([lat,lon]) => proj.forward([lon, lat]));
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  xy.forEach(([x,y])=>{ if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y; });
+  const pad = 20;
+  const scale = Math.min((box.w - pad*2)/(maxX-minX || 1), (box.h - pad*2)/(maxY-minY || 1));
+  const toPx = ([x,y]) => [ box.x + pad + (x - minX) * scale, box.y + box.h - pad - (y - minY) * scale ];
+  const px = xy.map(toPx);
+  // White background
+  ctx.fillStyle = '#fff'; ctx.fillRect(box.x+1, box.y+1, box.w-2, box.h-2);
+  // Draw polygon
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.beginPath();
+  px.forEach(([x,y],i)=>{ if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.closePath(); ctx.stroke();
+  // Vertices
+  ctx.fillStyle = '#000'; px.forEach(([x,y])=>{ ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill(); });
+  // Edge lengths in meters using geodesic distances
+  ctx.fillStyle = '#000'; ctx.font = '12px Arial';
+  for (let i=0;i<ptsLatLon.length;i++) {
+    const a = ptsLatLon[i]; const b = ptsLatLon[(i+1)%ptsLatLon.length];
+    const d = turf.distance([a[1],a[0]],[b[1],b[0]],{units:'meters'});
+    const pa = px[i]; const pb = px[(i+1)%px.length];
+    const mid = [(pa[0]+pb[0])/2, (pa[1]+pb[1])/2];
+    // normal offset
+    const dx = pb[0]-pa[0], dy = pb[1]-pa[1]; const len = Math.hypot(dx,dy)||1; const nx = -dy/len, ny = dx/len;
+    const tx = mid[0] + nx*12; const ty = mid[1] + ny*12;
+    ctx.fillText(d.toFixed(2)+' m', tx, ty);
+  }
+}
+
+function drawCoordinateTable(ctx, box, ptsLatLon) {
+  // Compute UTM coords
+  const center = ptsLatLon.reduce((s,p)=>[s[0]+p[0], s[1]+p[1]],[0,0]).map(v=>v/ptsLatLon.length);
+  const { zone, proj } = getUtmProj(center[1], center[0]);
+  const rows = ptsLatLon.map(([lat,lon],i)=>{
+    const [x,y] = proj.forward([lon, lat]);
+    return { idx: i+1, x: x, y: y };
   });
+  // Header
+  ctx.fillStyle = '#f7f7f7'; ctx.fillRect(box.x, box.y, box.w, 28);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(box.x, box.y, box.w, box.h);
+  ctx.fillStyle = '#000'; ctx.font = 'bold 13px Arial';
+  ctx.fillText(`جدول مختصات UTM (زون ${zone})`, box.x + 8, box.y + 19);
+  // Columns: Pt | X | Y
+  const colIdxW = 60; const colXW = Math.floor((box.w - colIdxW)/2); const colYW = box.w - colIdxW - colXW;
+  // Column headers
+  const headerY = box.y + 32;
+  ctx.font = 'bold 12px Arial';
+  ctx.fillText('نقطه', box.x + 8, headerY);
+  ctx.fillText('X', box.x + colIdxW + 8, headerY);
+  ctx.fillText('Y', box.x + colIdxW + colXW + 8, headerY);
+  // Rows
+  ctx.font = '12px IBM Plex Mono, monospace';
+  const rowH = 22; let y = headerY + 8;
+  rows.forEach(r=>{
+    if (y + rowH > box.y + box.h) return; // stop overflow
+    ctx.fillStyle = '#000';
+    ctx.fillText(String(r.idx), box.x + 8, y + 14);
+    ctx.fillText(Math.round(r.x).toString(), box.x + colIdxW + 8, y + 14);
+    ctx.fillText(Math.round(r.y).toString(), box.x + colIdxW + colXW + 8, y + 14);
+    // optional row separators
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.moveTo(box.x, y + rowH); ctx.lineTo(box.x + box.w, y + rowH); ctx.stroke();
+    y += rowH;
+  });
+}
+
+function drawInfoBox(ctx, box) {
+  const { areaM2 } = computeFieldMetrics();
+  const lines = [
+    ['نام و نام خانوادگی', formInfo.fullname || '-'],
+    ['نام پدر', formInfo.father || '-'],
+    ['کد ملی', formInfo.nid || '-'],
+    ['منطقه', formInfo.region || '-'],
+    ['پلاک اصلی', formInfo.parcelMain || '-'],
+    ['پلاک فرعی', formInfo.parcelSub || '-'],
+    ['مساحت (متر مربع)', areaM2 ? areaM2.toFixed(2) : '-'],
+  ];
+  ctx.fillStyle = '#f7f7f7'; ctx.fillRect(box.x+1, box.y+1, box.w-2, box.h-2);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(box.x, box.y, box.w, box.h);
+  ctx.fillStyle = '#000'; ctx.font = 'bold 13px Arial'; ctx.fillText('اطلاعات نقشه', box.x + 8, box.y + 20);
+  let y = box.y + 34; const rowH = 24;
+  ctx.font = '12px Arial';
+  lines.forEach(([k,v])=>{
+    if (y + rowH > box.y + box.h) return;
+    ctx.fillStyle = '#333'; ctx.fillText(k + ':', box.x + 8, y + 14);
+    ctx.fillStyle = '#000'; ctx.fillText(v, box.x + 140, y + 14);
+    y += rowH;
+  });
+}
+
+async function snapshotMapWithBase(baseKey, includePolygon, ptsLatLon, includeTraffic=false) {
+  const prevBase = currentBaseKey;
+  const trafficWasOn = trafficLayer && map.hasLayer(trafficLayer);
+  // Temp polygon layer
+  let tempPoly = null;
+  try {
+    setBaseLayer(baseKey);
+    if (includeTraffic && trafficLayer) trafficLayer.addTo(map);
+    if (!includeTraffic && trafficLayer && map.hasLayer(trafficLayer)) map.removeLayer(trafficLayer);
+    if (includePolygon && ptsLatLon && ptsLatLon.length>=3) {
+      tempPoly = L.polygon(ptsLatLon, { color: '#ff3b30', weight: 2, fillOpacity: 0.1 }).addTo(map);
+    }
+    const img = await new Promise((resolve) => {
+      leafletImage(map, function(err, mapCanvas) { if (err) resolve(null); else resolve(mapCanvas); });
+    });
+    return img;
+  } finally {
+    if (tempPoly) map.removeLayer(tempPoly);
+    if (trafficWasOn) { if (trafficLayer && !map.hasLayer(trafficLayer)) trafficLayer.addTo(map); }
+    else { if (trafficLayer && map.hasLayer(trafficLayer)) map.removeLayer(trafficLayer); }
+    setBaseLayer(prevBase);
+  }
 }
 
 function drawNorthArrow(ctx, x, y) {
@@ -752,6 +989,8 @@ function initUI() {
   };
   document.getElementById('btn-waypoints').onclick = () => { openWaypointsDialog(); };
   document.getElementById('btn-print').onclick = openA4Preview;
+  const btnReview = document.getElementById('btn-review'); if (btnReview) btnReview.onclick = openReview;
+  const btnPlot = document.getElementById('btn-plot'); if (btnPlot) btnPlot.onclick = drawFieldPolygon;
   document.getElementById('download-image').onclick = downloadA4Png;
   const btnPdf = document.getElementById('download-pdf'); if (btnPdf) btnPdf.onclick = downloadA4Pdf;
   document.getElementById('close-waypoints').onclick = closeWaypointsDialog;
@@ -887,6 +1126,9 @@ function initUI() {
   // Logging CSV toggle
   const btnLog = document.getElementById('btn-log');
   if (btnLog) btnLog.onclick = () => { loggingCsv.active = !loggingCsv.active; btnLog.textContent = loggingCsv.active ? 'توقف CSV' : 'ثبت CSV'; if (loggingCsv.active) loggingCsv.rows = ['time,lat,lon,alt,acc,speed']; };
+
+  // GNSS (Web Serial) button
+  const btnGnss = document.getElementById('btn-gnss'); if (btnGnss) btnGnss.onclick = connectGnss;
 
   // Ripple effect delegation for all .btn
   document.body.addEventListener('click', (e) => {
@@ -1028,6 +1270,7 @@ function renderSparkline() {
   // Draw speed (green) and altitude (yellow-green)
   drawSeries(ctx, speedHistory, '#00d46a');
   drawSeries(ctx, normalizeSeries(altHistory), '#c3ff00');
+  renderSatSNR();
 }
 
 function drawSeries(ctx, series, color) {
@@ -1226,5 +1469,70 @@ function saveAveragedPoint() {
 function downloadCsvLog() {
   if (!loggingCsv.rows.length) { toast('داده‌ای ثبت نشده', 'warn'); return; }
   downloadText('log.csv', loggingCsv.rows.join('\n'), 'text/csv');
+}
+
+async function connectGnss() {
+  try {
+    if (!('serial' in navigator)) { toast('مرورگر از Web Serial پشتیبانی نمی‌کند', 'error'); return; }
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 9600 });
+    nmea.device = port; nmea.connected = true; updateSatBadge();
+    const decoder = new TextDecoderStream();
+    const readableStreamClosed = port.readable.pipeTo(decoder.writable);
+    const inputStream = decoder.readable;
+    nmea.reader = inputStream.getReader();
+    let buffer = '';
+    (async () => {
+      while (true) {
+        const { value, done } = await nmea.reader.read();
+        if (done) break;
+        buffer += value;
+        let idx;
+        while ((idx = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, idx).trim(); buffer = buffer.slice(idx+1);
+          if (line.startsWith('$')) handleNmeaSentence(line);
+        }
+      }
+    })();
+    toast('GNSS متصل شد', 'success');
+  } catch (e) { console.warn(e); toast('اتصال GNSS ناموفق', 'error'); }
+}
+
+function handleNmeaSentence(s) {
+  // Basic GSV parsing for satellites and SNR
+  const parts = s.split(',');
+  if (s.includes('GSV')) {
+    const totalMsgs = parseInt(parts[1]);
+    const msgNum = parseInt(parts[2]);
+    const totalSats = parseInt(parts[3]);
+    if (msgNum === 1) nmea.sats = [];
+    for (let i = 4; i + 3 < parts.length; i += 4) {
+      const prn = parts[i];
+      const elev = parseInt(parts[i+1]);
+      const az = parseInt(parts[i+2]);
+      const snr = parseInt(parts[i+3]);
+      if (prn) nmea.sats.push({ prn, elev, az, snr: Number.isFinite(snr) ? snr : 0 });
+    }
+    updateSatBadge();
+    renderSatSNR();
+  }
+}
+
+function renderSatSNR() {
+  const c = document.getElementById('sat-snr'); if (!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  const sats = (nmea.sats || []).slice(0, 12);
+  const w = c.width, h = c.height; const barW = Math.max(14, (w - 20) / Math.max(12, sats.length+1));
+  ctx.fillStyle = '#98b18d'; ctx.font = '10px IBM Plex Mono, monospace';
+  sats.forEach((sat, idx) => {
+    const x = 10 + idx * barW;
+    const snr = Math.max(0, Math.min(60, sat.snr || 0));
+    const bh = (snr / 60) * (h - 24);
+    ctx.fillStyle = snr >= 35 ? '#00d46a' : snr >= 20 ? '#c3ff00' : '#ff3b30';
+    ctx.fillRect(x, h - 12 - bh, barW - 6, bh);
+    ctx.fillStyle = '#98b18d';
+    ctx.fillText(String(sat.prn), x, h - 2);
+  });
 }
 

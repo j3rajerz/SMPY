@@ -207,6 +207,9 @@
             border: 1px solid var(--border-color);
             border-radius: 5px;
         }
+        .gnss-toolbar { display:flex; align-items:center; justify-content:space-between; }
+        .gnss-stats { display:flex; gap:12px; font-family:'Courier New', monospace; }
+        .gnss-badge { padding:2px 6px; border:1px solid var(--border-color); border-radius:3px; }
         
         .panel-title {
             color: var(--highlight-color);
@@ -546,6 +549,95 @@
         .hidden {
             display: none;
         }
+
+        /* A4 Sheet overlay */
+        .a4-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #f6f6f6;
+            color: #000;
+            z-index: 1001;
+            overflow: auto;
+        }
+
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 10mm auto;
+            background: #fff;
+            box-shadow: 0 0 0.5mm rgba(0,0,0,0.3);
+            padding: 8mm;
+            box-sizing: border-box;
+            font-family: Tahoma, Arial, sans-serif;
+        }
+
+        .a4-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            grid-gap: 6mm;
+        }
+
+        .box {
+            border: 1px solid #999;
+            border-radius: 2mm;
+            background: #fff;
+        }
+
+        .box .box-header {
+            padding: 4mm 5mm;
+            border-bottom: 1px solid #ddd;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .box .box-body {
+            padding: 4mm 5mm;
+        }
+
+        .plan-map {
+            height: 120mm;
+            background: #fff;
+        }
+
+        .sat-map { height: 70mm; }
+        .traffic-map { height: 50mm; }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-gap: 3mm;
+        }
+
+        .info-grid .field {
+            display: flex;
+            flex-direction: column;
+            font-size: 11px;
+        }
+
+        .info-grid label { color: #333; margin-bottom: 1mm; }
+        .info-grid input { padding: 3mm; border: 1px solid #ccc; border-radius: 1mm; font-size: 11px; }
+        .info-grid input[readonly] { background: #fafafa; font-weight: bold; }
+
+        table.coords { width: 100%; border-collapse: collapse; font-size: 11px; }
+        table.coords th, table.coords td { border: 1px solid #ccc; padding: 2mm; text-align: center; }
+        table.coords th { background: #f0f0f0; }
+
+        .a4-actions { display: flex; justify-content: space-between; margin-top: 6mm; }
+        .a4-btn { padding: 3mm 5mm; border: 1px solid #333; background: #fff; cursor: pointer; font-size: 11px; }
+
+        /* Print styles */
+        @media print {
+            @page { size: A4; margin: 8mm; }
+            body { background: #fff; overflow: visible; }
+            .container, .modal-overlay, .result-screen { display: none !important; }
+            .a4-overlay { display: block !important; background: #fff; }
+            .a4-page { box-shadow: none; margin: 0; width: auto; min-height: auto; padding: 0; }
+            .a4-actions { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -611,6 +703,16 @@
             
             <!-- بخش ماهواره‌ها -->
             <div class="content-section" id="sectionSatellite">
+                <div class="satellite-panel">
+                    <div class="gnss-toolbar">
+                        <button class="action-btn" id="btnGnssConnect">🔗 اتصال گیرنده GNSS</button>
+                        <div class="gnss-stats">
+                            <span class="gnss-badge">Fix: <span id="gnssFixType">---</span></span>
+                            <span class="gnss-badge">HDOP: <span id="gnssHdop">--</span></span>
+                            <span class="gnss-badge">Used: <span id="gnssUsed">0</span></span>
+                        </div>
+                    </div>
+                </div>
                 <div class="satellite-panel">
                     <div class="panel-title">ماهواره‌های GPS</div>
                     <div class="satellite-grid" id="gpsSatellites">
@@ -783,12 +885,76 @@
         
         <div class="result-actions">
             <button class="action-btn" id="btnShare">📤 اشتراک گذاری</button>
-            <button class="action-btn" id="btnSave">💾 ذخیره PDF</button>
+            <button class="action-btn" id="btnExportA4">🖨️ خروجی A4</button>
             <button class="action-btn" id="btnCloseResult">❌ بستن</button>
         </div>
     </div>
 
+    <!-- A4 Output Overlay -->
+    <div class="a4-overlay" id="a4Overlay">
+        <div class="a4-page">
+            <div class="a4-grid">
+                <div>
+                    <div class="box">
+                        <div class="box-header">نقشه پلان</div>
+                        <div class="box-body">
+                            <div id="mapPlan" class="plan-map"></div>
+                        </div>
+                    </div>
+                    <div class="box" style="margin-top:6mm;">
+                        <div class="box-header">مختصات نقاط (UTM)</div>
+                        <div class="box-body">
+                            <table class="coords">
+                                <thead>
+                                    <tr><th>نقطه</th><th>X (m)</th><th>Y (m)</th></tr>
+                                </thead>
+                                <tbody id="coordsTbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="box">
+                        <div class="box-header">اطلاعات قطعه</div>
+                        <div class="box-body">
+                            <div class="info-grid">
+                                <div class="field"><label>مساحت (m²)</label><input id="fieldArea" type="text" readonly></div>
+                                <div class="field"><label>پلاک اصلی</label><input id="fieldMain" type="text"></div>
+                                <div class="field"><label>شماره قطعه</label><input id="fieldParcel" type="text"></div>
+                                <div class="field"><label>بخش</label><input id="fieldSection" type="text"></div>
+                                <div class="field"><label>موقعیت</label><input id="fieldLocation" type="text"></div>
+                                <div class="field"><label>مالک</label><input id="fieldOwner" type="text"></div>
+                                <div class="field"><label>نام پدر/خریدار</label><input id="fieldBuyer" type="text"></div>
+                                <div class="field"><label>کد ملی</label><input id="fieldNational" type="text"></div>
+                                <div class="field"><label>تاریخ</label><input id="fieldDate" type="date"></div>
+                                <div class="field"><label>اپراتور</label><input id="fieldOperator" type="text"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="box" style="margin-top:6mm;">
+                        <div class="box-header">تصویر ماهواره‌ای</div>
+                        <div class="box-body">
+                            <div id="mapSatellite" class="sat-map"></div>
+                        </div>
+                    </div>
+                    <div class="box" style="margin-top:6mm;">
+                        <div class="box-header">نقشه ترافیکی</div>
+                        <div class="box-body">
+                            <div id="mapTraffic" class="traffic-map"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="a4-actions">
+                <button class="a4-btn" id="btnCloseA4">بستن</button>
+                <button class="a4-btn" id="btnPrintA4">چاپ / PDF</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
     <script>
         // پایگاه داده و متغیرهای جهانی
         const AppState = {
@@ -812,9 +978,12 @@
 
         // نقشه‌ها
         let mapCapture, mapDraw, mapResult;
+        let mapPlan, mapSatellite, mapTraffic;
         let currentMarker = null;
         let drawnPolygon = null;
         let gpsWatchId = null;
+        let planPolygonLayer = null;
+        let planLengthMarkers = [];
 
         // عناصر DOM
         const elements = {
@@ -837,6 +1006,9 @@
             gpsSatellites: document.getElementById('gpsSatellites'),
             glonassSatellites: document.getElementById('glonassSatellites')
         };
+        elements.gnssFixType = document.getElementById('gnssFixType');
+        elements.gnssHdop = document.getElementById('gnssHdop');
+        elements.gnssUsed = document.getElementById('gnssUsed');
 
         // توابع اصلی
         function initializeApp() {
@@ -849,6 +1021,94 @@
             
             setInterval(updateTime, 1000);
             setInterval(updateSatelliteDisplay, 2000);
+        }
+
+        // GNSS over Web Serial (NMEA)
+        let gnssPort = null;
+        let gnssReader = null;
+        let gnssReading = false;
+
+        async function connectGNSSViaSerial() {
+            try {
+                if (!('serial' in navigator)) {
+                    showError('مرورگر از Web Serial پشتیبانی نمی‌کند');
+                    return;
+                }
+                gnssPort = await navigator.serial.requestPort();
+                await gnssPort.open({ baudRate: 9600 });
+                const decoder = new TextDecoderStream();
+                gnssPort.readable.pipeTo(decoder.writable);
+                const inputStream = decoder.readable;
+                gnssReader = inputStream.getReader();
+                gnssReading = true;
+                readNMEA();
+                showSuccess('اتصال GNSS برقرار شد');
+            } catch (e) {
+                showError('اتصال به GNSS ناموفق بود');
+                console.error(e);
+            }
+        }
+
+        async function readNMEA() {
+            let buffer = '';
+            while (gnssReading) {
+                try {
+                    const { value, done } = await gnssReader.read();
+                    if (done) break;
+                    buffer += value;
+                    let idx;
+                    while ((idx = buffer.indexOf('\n')) >= 0) {
+                        const line = buffer.slice(0, idx).trim();
+                        buffer = buffer.slice(idx + 1);
+                        if (line.startsWith('$')) parseNMEALine(line);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    break;
+                }
+            }
+        }
+
+        function parseNMEALine(sentence) {
+            const parts = sentence.split(',');
+            const type = parts[0].substring(3, 6);
+            switch (type) {
+                case 'GGA': handleGGA(parts); break;
+                case 'GSA': handleGSA(parts); break;
+                case 'GSV': handleGSV(parts); break;
+                default: break;
+            }
+        }
+
+        function handleGGA(p) {
+            // Fix quality: 0=invalid,1=GPS,2=DGPS,4=RTK Fixed,5=RTK Float
+            const fixQ = parseInt(p[6] || '0', 10);
+            const hdop = parseFloat(p[8] || '0');
+            elements.gnssHdop.textContent = isFinite(hdop) ? hdop.toFixed(1) : '--';
+            elements.gnssFixType.textContent = (
+                fixQ === 4 ? 'RTK Fixed' : fixQ === 5 ? 'RTK Float' : fixQ === 2 ? 'DGPS' : fixQ === 1 ? 'GPS' : 'No Fix'
+            );
+        }
+
+        function handleGSA(p) {
+            // Satellites used count (IDs from p[3]..p[14])
+            const used = p.slice(3, 15).filter(x => x && x !== '').length;
+            elements.gnssUsed.textContent = used;
+        }
+
+        function handleGSV(p) {
+            // Per-satellite SNR appears in groups of 4 values starting at index 4
+            const sats = [];
+            for (let i = 4; i < p.length - 4; i += 4) {
+                const id = parseInt(p[i], 10);
+                const snr = parseInt(p[i + 3], 10);
+                if (!isNaN(id)) sats.push({ id, snr: isNaN(snr) ? 0 : snr, active: true });
+            }
+            if (sats.length) {
+                AppState.satellites.gps = sats; // simple overwrite for display
+                updateSatelliteDisplay();
+                elements.satelliteCount.textContent = String(sats.length);
+            }
         }
 
         function setupEventListeners() {
@@ -874,12 +1134,16 @@
             
             // نتیجه
             document.getElementById('btnShare').addEventListener('click', shareResult);
-            document.getElementById('btnSave').addEventListener('click', saveResult);
+            document.getElementById('btnExportA4').addEventListener('click', openA4Overlay);
             document.getElementById('btnCloseResult').addEventListener('click', closeResult);
+            document.getElementById('btnCloseA4').addEventListener('click', closeA4Overlay);
+            document.getElementById('btnPrintA4').addEventListener('click', () => window.print());
             
             // تنظیمات
             document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
             document.getElementById('btnReset').addEventListener('click', resetSettings);
+            // GNSS connect
+            document.getElementById('btnGnssConnect').addEventListener('click', connectGNSSViaSerial);
         }
 
         function initializeMaps() {
@@ -889,12 +1153,11 @@
                 attribution: '© OpenStreetMap contributors'
             }).addTo(mapCapture);
             
-            // نقشه ترسیم
+            // نقشه ترسیم (بدون کلید API - Esri World Imagery)
             mapDraw = L.map('mapDraw').setView([35.6892, 51.3890], 15);
-            L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 maxZoom: 20,
-                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-                attribution: 'Google Satellite'
+                attribution: 'Esri — World Imagery'
             }).addTo(mapDraw);
             
             // نقشه نتیجه
@@ -1064,8 +1327,9 @@
 
         function showFinalResult() {
             // محاسبه مساحت (ساده‌سازی شده)
-            const area = calculateArea(AppState.capturedPoints);
-            elements.resultArea.textContent = `${area} متر مربع`;
+            const latlngs = getCurrentPolygonLatLngs();
+            const area = calculateAreaMeters(latlngs);
+            elements.resultArea.textContent = `${Math.round(area)} متر مربع`;
             
             // پر کردن اطلاعات مالک
             if (AppState.ownerData) {
@@ -1120,19 +1384,123 @@
             }
         }
 
-        function calculateArea(points) {
-            // محاسبه ساده مساحت (در نسخه واقعی از الگوریتم دقیق‌تر استفاده شود)
-            if (points.length < 3) return 0;
-            
-            // محاسبه مساحت با فرمول shoelace
-            let area = 0;
-            for (let i = 0; i < points.length; i++) {
-                const j = (i + 1) % points.length;
-                area += points[i].lng * points[j].lat;
-                area -= points[j].lng * points[i].lat;
+        function calculateAreaMeters(latlngs) {
+            if (!latlngs || latlngs.length < 3) return 0;
+            const coords = latlngs.map(p => [p.lng, p.lat]);
+            coords.push([latlngs[0].lng, latlngs[0].lat]);
+            const polygon = turf.polygon([[...coords]]);
+            return turf.area(polygon);
+        }
+
+        function getCurrentPolygonLatLngs() {
+            const src = AppState.drawnPoints.length >= 3 ? AppState.drawnPoints : AppState.capturedPoints;
+            return src.map(p => ({ lat: p.lat, lng: p.lng }));
+        }
+
+        function openA4Overlay() {
+            const overlay = document.getElementById('a4Overlay');
+            overlay.style.display = 'block';
+            setTimeout(() => {
+                initializeA4Maps();
+                syncA4FromState();
+            }, 50);
+        }
+
+        function closeA4Overlay() {
+            document.getElementById('a4Overlay').style.display = 'none';
+        }
+
+        function initializeA4Maps() {
+            const latlngs = getCurrentPolygonLatLngs();
+            const center = latlngs.length ? [latlngs[0].lat, latlngs[0].lng] : [35.6892, 51.3890];
+
+            if (!mapPlan) {
+                mapPlan = L.map('mapPlan', { zoomControl: false, attributionControl: false }).setView(center, 18);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapPlan);
+            } else { mapPlan.invalidateSize(); mapPlan.setView(center); }
+
+            if (!mapSatellite) {
+                mapSatellite = L.map('mapSatellite', { zoomControl: false, attributionControl: false }).setView(center, 18);
+                // ماهواره بدون API Key
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    maxZoom: 20,
+                    attribution: 'Esri — World Imagery'
+                }).addTo(mapSatellite);
+            } else { mapSatellite.invalidateSize(); mapSatellite.setView(center); }
+
+            if (!mapTraffic) {
+                mapTraffic = L.map('mapTraffic', { zoomControl: false, attributionControl: false }).setView(center, 16);
+                // Fallback: OSM roads; for live traffic integrate Google/HERE via plugins and API keys
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapTraffic);
+            } else { mapTraffic.invalidateSize(); mapTraffic.setView(center); }
+        }
+
+        function syncA4FromState() {
+            const latlngs = getCurrentPolygonLatLngs();
+            if (latlngs.length < 3) return;
+
+            // Area
+            const area = calculateAreaMeters(latlngs);
+            document.getElementById('fieldArea').value = Math.round(area).toLocaleString('fa-IR');
+
+            // Prefill info fields from owner modal data if available
+            if (AppState.ownerData) {
+                document.getElementById('fieldOwner').value = `${AppState.ownerData.name} ${AppState.ownerData.lastName}`;
+                document.getElementById('fieldNational').value = AppState.ownerData.nationalId || '';
+                document.getElementById('fieldSection').value = AppState.ownerData.section || '';
+                document.getElementById('fieldMain').value = AppState.ownerData.mainPlate || '';
             }
-            
-            return Math.abs(Math.round(area / 2 * 1000000)); // تقریب به متر مربع
+
+            // Draw polygon on all maps
+            [mapPlan, mapSatellite, mapTraffic].forEach(m => {
+                if (!m) return;
+                let polygon = L.polygon(latlngs.map(p => [p.lat, p.lng]), { color: '#000', weight: 2, fillColor: '#dfe8f3', fillOpacity: 0.35 });
+                polygon.addTo(m);
+                m.fitBounds(polygon.getBounds(), { padding: [10,10] });
+            });
+
+            // Plan map: black polygon with side length labels
+            if (planPolygonLayer) {
+                mapPlan.removeLayer(planPolygonLayer);
+            }
+            planLengthMarkers.forEach(x => mapPlan.removeLayer(x));
+            planLengthMarkers = [];
+
+            planPolygonLayer = L.polygon(latlngs.map(p => [p.lat, p.lng]), { color: '#000', weight: 2, fillColor: '#eaeff7', fillOpacity: 0.6 }).addTo(mapPlan);
+            mapPlan.fitBounds(planPolygonLayer.getBounds(), { padding: [10,10] });
+
+            // Edge labels
+            for (let i = 0; i < latlngs.length; i++) {
+                const a = latlngs[i];
+                const b = latlngs[(i + 1) % latlngs.length];
+                const line = turf.lineString([[a.lng, a.lat],[b.lng, b.lat]]);
+                const lengthMeters = turf.length(line, { units: 'kilometers' }) * 1000;
+                const mid = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 };
+                const label = L.marker([mid.lat, mid.lng], {
+                    icon: L.divIcon({ className: '', html: `<div style="background:#000;color:#fff;padding:2px 4px;border-radius:3px;font-size:10px;">${lengthMeters.toFixed(2)}</div>` })
+                }).addTo(mapPlan);
+                planLengthMarkers.push(label);
+            }
+
+            // Coordinates table UTM
+            renderCoordsTable(latlngs);
+        }
+
+        function renderCoordsTable(latlngs) {
+            const tbody = document.getElementById('coordsTbody');
+            tbody.innerHTML = '';
+            const centroid = latlngs.reduce((acc, p) => ({ lat: acc.lat + p.lat, lng: acc.lng + p.lng }), { lat:0, lng:0 });
+            centroid.lat /= latlngs.length; centroid.lng /= latlngs.length;
+            const zone = Math.floor((centroid.lng + 180) / 6) + 1;
+            const utm = `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs`;
+            const wgs84 = proj4.WGS84;
+            const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            latlngs.forEach((p, idx) => {
+                const [x, y] = proj4(utm, [p.lng, p.lat]);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${letters[idx] || (idx+1)}</td><td>${x.toFixed(3)}</td><td>${y.toFixed(3)}</td>`;
+                tbody.appendChild(tr);
+            });
         }
 
         function simulateSatelliteData() {
